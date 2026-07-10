@@ -1,68 +1,51 @@
-import type { ResumeProfile } from "@/lib/schemas";
-
-const SECTION_PATTERNS: { key: keyof Pick<ResumeProfile, "summary" | "skills" | "experience" | "education">; patterns: RegExp[] }[] = [
-  { key: "summary", patterns: [/^(professional\s+)?summary$/i, /^profile$/i, /^about$/i] },
-  { key: "skills", patterns: [/^(technical\s+)?skills$/i, /^core\s+competencies$/i] },
-  { key: "experience", patterns: [/^(work\s+)?experience$/i, /^employment$/i, /^professional\s+experience$/i] },
-  { key: "education", patterns: [/^education$/i, /^academic$/i] },
-];
-
 /**
- * Best-effort plain-text resume sectioning for display in Phase 1.
- * Not used for scoring — LLM parsing replaces this in Phase 2.
+ * Display-only heuristic sectioning for pasted resume text (Phase 1).
+ *
+ * This is a best-effort split used purely to give the input step a little
+ * feedback ("we detected these sections"). It is NOT the real parser — Phase 2
+ * replaces resume parsing with the Groq-backed `services/resume-parser`.
  */
-export function heuristicParseResume(text: string): Partial<ResumeProfile> {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const sections: Record<string, string[]> = { header: [] };
-  let current = "header";
+
+const SECTION_HEADINGS: Record<string, RegExp> = {
+  Summary: /^(summary|profile|objective|about)\b/i,
+  Experience: /^(experience|work experience|employment|professional experience)\b/i,
+  Skills: /^(skills|technical skills|core competencies)\b/i,
+  Education: /^(education|academic)\b/i,
+  Projects: /^(projects|selected projects)\b/i,
+  Certifications: /^(certifications|licenses)\b/i,
+};
+
+export interface DetectedSection {
+  name: string;
+  lineCount: number;
+}
+
+/** Return a rough list of detected resume sections for display. */
+export function detectSections(resumeText: string): DetectedSection[] {
+  const lines = resumeText
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const sections: DetectedSection[] = [];
+  let current: DetectedSection | null = null;
 
   for (const line of lines) {
-    const isHeader = SECTION_PATTERNS.some(({ patterns }) =>
-      patterns.some((p) => p.test(line))
+    const matched = Object.entries(SECTION_HEADINGS).find(([, re]) =>
+      re.test(line),
     );
-    if (isHeader) {
-      const match = SECTION_PATTERNS.find(({ patterns }) =>
-        patterns.some((p) => p.test(line))
-      );
-      current = match?.key ?? "header";
-      sections[current] = sections[current] ?? [];
-      continue;
+    if (matched) {
+      current = { name: matched[0], lineCount: 0 };
+      sections.push(current);
+    } else if (current) {
+      current.lineCount += 1;
     }
-    sections[current] = sections[current] ?? [];
-    sections[current].push(line);
   }
 
-  const emailMatch = text.match(/[\w.+-]+@[\w.-]+\.\w+/);
-  const phoneMatch = text.match(/\+?[\d\s().-]{10,}/);
+  return sections;
+}
 
-  const experience: ResumeProfile["experience"] = [];
-  const expLines = sections.experience ?? [];
-  let currentJob: (typeof experience)[number] | null = null;
-
-  for (const line of expLines) {
-    if (line.startsWith("•") || line.startsWith("-") || line.startsWith("*")) {
-      const bullet = line.replace(/^[-•*]\s*/, "");
-      if (currentJob) currentJob.bullets.push(bullet);
-      continue;
-    }
-    if (currentJob) experience.push(currentJob);
-    const parts = line.split("|").map((p) => p.trim());
-    currentJob = {
-      company: parts[0] ?? line,
-      title: parts[1] ?? "Role",
-      bullets: [],
-    };
-  }
-  if (currentJob) experience.push(currentJob);
-
-  return {
-    contact: {
-      email: emailMatch?.[0],
-      phone: phoneMatch?.[0],
-    },
-    summary: (sections.summary ?? []).join(" "),
-    skills: (sections.skills ?? []).join(" ").split(/[,;|]/).map((s) => s.trim()).filter(Boolean),
-    experience: experience.length > 0 ? experience : undefined,
-    education: (sections.education ?? []).map((line) => ({ institution: line })),
-  };
+/** True when the pasted text looks substantial enough to analyze. */
+export function looksLikeResume(resumeText: string): boolean {
+  return resumeText.trim().length >= 40;
 }

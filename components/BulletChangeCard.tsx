@@ -1,48 +1,58 @@
-"use client";
+import { AlertTriangle } from "lucide-react";
 
-import type { TailoredBullet } from "@/lib/schemas";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { Confidence, TailoredBullet } from "@/lib/schemas";
 
-type BulletChangeCardProps = {
+interface BulletChangeCardProps {
   bullet: TailoredBullet;
-};
+}
 
-const confidenceVariant = {
-  high: "success" as const,
-  medium: "medium" as const,
-  low: "warning" as const,
-};
+function confidenceVariant(confidence: Confidence) {
+  if (confidence === "high") return "success" as const;
+  if (confidence === "medium") return "warning" as const;
+  return "danger" as const;
+}
 
+/** Per-bullet before/after with change metadata (reason, keywords, confidence). */
 export function BulletChangeCard({ bullet }: BulletChangeCardProps) {
-  const changed = bullet.original.trim() !== bullet.tailored.trim();
-  const needsReview = Boolean(bullet.riskFlag) || bullet.confidence === "low";
+  const changed = bullet.original !== bullet.tailored;
 
   return (
     <div
       className={cn(
-        "rounded-md border p-3 text-sm",
-        changed && "border-primary/30 bg-primary/5",
-        needsReview &&
-          "border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/30"
+        "rounded-md border border-l-[3px] p-3 space-y-2",
+        bullet.riskFlag
+          ? "border-warning/50 border-l-warning bg-[color-mix(in_srgb,var(--warning)_6%,transparent)]"
+          : bullet.confidence === "low"
+            ? "border-danger/40 border-l-danger"
+            : "border-border border-l-border",
       )}
     >
-      <p
-        className={cn(
-          "leading-relaxed",
-          changed && "bg-primary/10 rounded px-1 py-0.5"
-        )}
-      >
-        {bullet.tailored}
-      </p>
-      {changed && (
-        <p className="mt-2 text-xs text-muted-foreground line-through">
-          {bullet.original}
-        </p>
-      )}
-      <p className="mt-2 text-xs text-muted-foreground">{bullet.changeReason}</p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        <Badge variant={confidenceVariant[bullet.confidence]}>
+      <div className="grid gap-2 md:grid-cols-2">
+        <div className="space-y-1">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Original
+          </div>
+          <p className="text-sm text-muted-foreground">{bullet.original}</p>
+        </div>
+        <div className="space-y-1">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Tailored
+          </div>
+          <p
+            className={cn(
+              "text-sm",
+              changed && "rounded bg-accent px-1 text-accent-foreground",
+            )}
+          >
+            {bullet.tailored}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant={confidenceVariant(bullet.confidence)}>
           {bullet.confidence} confidence
         </Badge>
         {bullet.keywordsAddressed.map((kw) => (
@@ -50,10 +60,19 @@ export function BulletChangeCard({ bullet }: BulletChangeCardProps) {
             {kw}
           </Badge>
         ))}
-        {bullet.riskFlag && (
-          <Badge variant="high">{bullet.riskFlag}</Badge>
-        )}
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">Why:</span>{" "}
+        {bullet.changeReason}
+      </p>
+
+      {bullet.riskFlag && (
+        <p className="flex items-start gap-1.5 text-xs text-warning">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          {bullet.riskFlag}
+        </p>
+      )}
     </div>
   );
 }

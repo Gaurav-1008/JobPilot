@@ -1,46 +1,51 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { downloadBase64Pdf } from "@/lib/download-pdf";
-import type {
-  PdfExportRequest,
-  PdfExportResponse,
-  PdfExportType,
-} from "@/lib/api-types";
-import type { TailoringRunPartial } from "@/lib/schemas";
 
-async function postExportPdf(
-  payload: PdfExportRequest
-): Promise<PdfExportResponse> {
-  const res = await fetch("/api/export/pdf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = (await res.json()) as PdfExportResponse & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? "PDF export failed");
-  return data;
+type PdfType = "tailored" | "comparison";
+
+interface ExportFile {
+  type: PdfType;
+  filename: string;
+  mimeType: string;
+  base64: string;
 }
 
-export function useExportPdf(
-  run: TailoringRunPartial | null,
-  onExported?: () => void
-) {
-  return useMutation({
-    mutationFn: async (types: PdfExportType[]) => {
-      if (!run?.id) throw new Error("No active run");
-      const response = await postExportPdf({
-        runId: run.id,
-        types,
-        run,
+/** Convert a base64 payload to a Blob and trigger a browser download. */
+function downloadBase64(file: ExportFile) {
+  const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: file.mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Request PDF export for a run and download the returned files. */
+export function useExportPdf() {
+  const mutation = useMutation({
+    mutationFn: async (input: { runId: string; types: PdfType[] }) => {
+      const res = await fetch("/api/export/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
       });
-      for (const file of response.files) {
-        downloadBase64Pdf(file);
-      }
-      return response;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Export failed");
+      return data.files as ExportFile[];
     },
-    onSuccess: () => {
-      onExported?.();
-    },
+    onSuccess: (files) => files.forEach(downloadBase64),
   });
+
+  return {
+    exportPdf: (runId: string, types: PdfType[]) =>
+      mutation.mutate({ runId, types }),
+    isExporting: mutation.isPending,
+    exportError: mutation.error as Error | null,
+    lastTypes: mutation.variables?.types,
+  };
 }

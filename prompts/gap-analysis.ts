@@ -1,38 +1,61 @@
-import { runPrompt } from "@/lib/llm/run-prompt";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { z } from "zod";
+
+import { systemMessage } from "@/prompts/system";
 import {
   GapAnalysisSchema,
   type JobDescriptionProfile,
-  type ResumeProfile,
 } from "@/lib/schemas";
 
-export async function analyzeGapsWithLlm(
-  resume: ResumeProfile,
-  jobDescription: JobDescriptionProfile,
-  runId?: string
-) {
-  return runPrompt({
+/**
+ * Response schema: the model returns { gaps: [...] }, but we also tolerate a
+ * bare array and normalize it in the service.
+ */
+export const GapAnalysisResponseSchema = z.union([
+  GapAnalysisSchema,
+  z.object({ gaps: GapAnalysisSchema.shape.gaps }),
+]);
+
+/** Identify missing/weak JD requirements against resume evidence. */
+export function gapAnalysisPrompt(jd: JobDescriptionProfile, resumeCorpus: string) {
+  const messages: ChatCompletionMessageParam[] = [
+    systemMessage(
+      "Compare a job description against a resume and list honest gaps. Never suggest fabricating experience. Return JSON only.",
+    ),
+    {
+      role: "user",
+      content: `List the gaps between this job description and resume as JSON: { "gaps": ResumeGap[] }.
+
+ResumeGap shape:
+{
+  "name": string,                 // the requirement/skill
+  "importance": "high" | "medium" | "low",
+  "jdEvidence": string,           // why the JD wants it
+  "resumeEvidence": string,       // what the resume shows (or "not found")
+  "suggestedAction": string,      // honest advice; if it must not be invented, say so
+  "canSafelyAdd": boolean         // true only if the candidate plausibly has it and it's just unstated
+}
+
+Rules:
+- Focus on required skills/qualifications first, then preferred.
+- canSafelyAdd=false for anything the candidate would have to fabricate (a skill/tool with zero resume evidence).
+- canSafelyAdd=true only for things likely true but merely unstated (e.g. on-call if they ran production services).
+- Return at most 8 gaps, most important first.
+
+JOB DESCRIPTION (structured):
+${JSON.stringify(jd)}
+
+RESUME CORPUS:
+"""
+${resumeCorpus}
+"""`,
+    },
+  ];
+
+  return {
     stage: "gap-analysis",
-    schema: GapAnalysisSchema,
-    runId,
+    schema: GapAnalysisResponseSchema,
+    messages,
     temperature: 0.2,
-    userPrompt: `Identify gaps between the resume and job description.
-
-For each gap return:
-- name: skill/requirement name
-- importance: "high" | "medium" | "low"
-- jdEvidence: quote or paraphrase from JD
-- resumeEvidence: where resume mentions it weakly, or "Not mentioned"
-- suggestedAction: actionable advice (e.g. interview prep, add if true, do not invent)
-- canSafelyAdd: false if the candidate should NOT add this unless they truly have it
-
-Do not invent resume content. Focus on the most important gaps (max 12).
-
-Return JSON: { "gaps": [...] }
-
-Resume:
-${JSON.stringify(resume)}
-
-Job description:
-${JSON.stringify(jobDescription)}`,
-  });
+  } as const;
 }

@@ -1,133 +1,113 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { AlertCircle, Loader2, Upload } from "lucide-react";
+import { Upload, Loader2, AlertTriangle } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { detectSections } from "@/lib/heuristic-resume";
 
-type ResumeInputProps = {
+interface ResumeInputProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
-  parseWarnings?: string[];
-  onParseWarnings?: (warnings: string[]) => void;
-  maxUploadMb?: number;
-};
+}
 
-export function ResumeInput({
-  value,
-  onChange,
-  disabled,
-  parseWarnings = [],
-  onParseWarnings,
-  maxUploadMb = 5,
-}: ResumeInputProps) {
+const ACCEPT = ".pdf,.docx,.txt,.md";
+
+/** Resume input: paste text or upload a PDF/DOCX/TXT (Phase 5). */
+export function ResumeInput({ value, onChange, disabled }: ResumeInputProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [filename, setFilename] = useState<string | null>(null);
 
-  const handleFile = async (file: File) => {
-    setUploadError(null);
+  const sections = value.trim() ? detectSections(value) : [];
+
+  async function handleFile(file: File) {
     setUploading(true);
+    setUploadError(null);
+    setWarnings([]);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/parse/resume", {
-        method: "POST",
-        body: form,
-      });
-      const data = (await res.json()) as {
-        text?: string;
-        parseWarnings?: string[];
-        error?: string;
-      };
-      if (!res.ok) {
-        throw new Error(data.error ?? "Upload failed");
-      }
-      if (data.text) onChange(data.text);
-      onParseWarnings?.(data.parseWarnings ?? []);
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/upload/resume", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Upload failed");
+      onChange(data.text);
+      setWarnings(data.warnings ?? []);
+      setFilename(file.name);
     } catch (err) {
-      setUploadError(
-        err instanceof Error ? err.message : "Could not parse file"
-      );
+      setUploadError((err as Error).message);
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
-  };
+  }
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center justify-between">
         <label htmlFor="resume-input" className="text-sm font-medium">
-          Resume
+          Your resume
         </label>
-        <div className="flex items-center gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            className="sr-only"
-            id="resume-file"
-            disabled={disabled || uploading}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handleFile(file);
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled || uploading}
-            onClick={() => fileRef.current?.click()}
-            aria-label="Upload resume PDF or DOCX"
-          >
-            {uploading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Upload className="size-4" />
-            )}
-            Upload PDF/DOCX
-          </Button>
-        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPT}
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.target.value = "";
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || uploading}
+          onClick={() => fileRef.current?.click()}
+          aria-label="Upload resume file (PDF, DOCX, or TXT)"
+        >
+          {uploading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Upload className="size-4" />
+          )}
+          Upload PDF/DOCX
+        </Button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Paste plain text or upload PDF/DOCX (max {maxUploadMb} MB).
-      </p>
+
       <Textarea
         id="resume-input"
-        placeholder="Paste your resume text here…"
+        placeholder="Paste your resume text here, or upload a file…"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
         disabled={disabled || uploading}
-        className="min-h-[220px] font-mono text-xs leading-relaxed"
-        aria-describedby={
-          parseWarnings.length > 0 ? "resume-parse-warnings" : undefined
-        }
+        onChange={(e) => onChange(e.target.value)}
+        className="min-h-[240px]"
       />
+
       {uploadError && (
-        <p className="text-sm text-destructive" role="alert">
+        <p className="flex items-center gap-1.5 text-xs text-danger">
+          <AlertTriangle className="size-3.5 shrink-0" />
           {uploadError}
         </p>
       )}
-      {parseWarnings.length > 0 && (
-        <div
-          id="resume-parse-warnings"
-          role="status"
-          className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100"
-        >
-          <p className="flex items-center gap-1.5 font-medium">
-            <AlertCircle className="size-3.5 shrink-0" />
-            Parse notes
-          </p>
-          <ul className="mt-1 list-inside list-disc space-y-0.5">
-            {parseWarnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {warnings.map((w, i) => (
+        <p key={i} className="flex items-start gap-1.5 text-xs text-warning">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          {w}
+        </p>
+      ))}
+
+      <p className="text-xs text-muted-foreground">
+        {filename && <>Loaded {filename} · </>}
+        {value.trim().length} characters
+        {sections.length > 0 && (
+          <> · detected sections: {sections.map((s) => s.name).join(", ")}</>
+        )}
+      </p>
     </div>
   );
 }

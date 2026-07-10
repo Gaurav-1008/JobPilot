@@ -1,21 +1,43 @@
-import { runPrompt } from "@/lib/llm/run-prompt";
-import { LlmMatchScoreResponseSchema } from "@/lib/llm/response-schemas";
-import type { JobDescriptionProfile, ResumeProfile } from "@/lib/schemas";
-import type { SkillOverlapHints } from "@/lib/scoring";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
-export async function scoreMatchWithLlm(
-  resume: ResumeProfile,
-  jobDescription: JobDescriptionProfile,
-  hints: SkillOverlapHints,
-  runId?: string
-) {
-  return runPrompt({
-    stage: "match-scoring",
-    schema: LlmMatchScoreResponseSchema,
-    runId,
-    userPrompt: `Score how well this resume matches the job description (0-100 each field).
+import { systemMessage } from "@/prompts/system";
+import {
+  MatchScoreSchema,
+  type JobDescriptionProfile,
+} from "@/lib/schemas";
 
-Return JSON:
+export interface MatchScoringInput {
+  jd: JobDescriptionProfile;
+  /** Flattened resume text: summary + skills + all bullet text. */
+  resumeCorpus: string;
+  /** Deterministic pre-checks used to seed the model for consistency. */
+  signals: {
+    requiredMatched: string[];
+    requiredMissing: string[];
+    preferredMatched: string[];
+    skillCoveragePct: number;
+    keywordCoveragePct: number;
+  };
+}
+
+/** Score resume↔JD alignment into an explainable MatchScore (0-100). */
+export function matchScoringPrompt({ jd, resumeCorpus, signals }: MatchScoringInput) {
+  const messages: ChatCompletionMessageParam[] = [
+    systemMessage(
+      "Score how well a resume matches a job description. Be calibrated and explainable — do not inflate. Return JSON only.",
+    ),
+    {
+      role: "user",
+      content: `Produce a MatchScore as JSON. All scores are 0-100 integers. Ground your judgement in the deterministic signals below, then refine using the full text.
+
+Deterministic signals (already computed):
+- Required skills matched: ${signals.requiredMatched.join(", ") || "(none)"}
+- Required skills MISSING: ${signals.requiredMissing.join(", ") || "(none)"}
+- Preferred skills matched: ${signals.preferredMatched.join(", ") || "(none)"}
+- Skill coverage: ${signals.skillCoveragePct}%
+- Keyword coverage: ${signals.keywordCoveragePct}%
+
+JSON shape:
 {
   "overallScore": number,
   "skillCoverageScore": number,
@@ -23,20 +45,28 @@ Return JSON:
   "keywordScore": number,
   "seniorityScore": number,
   "criticalMissingRequirements": string[],
-  "explanation": string (2-4 sentences, honest and specific)
+  "explanation": string
 }
 
-Do not inflate scores or imply credentials the resume does not support.
+Rules:
+- criticalMissingRequirements must include required skills with no resume evidence.
+- overallScore should roughly reflect the weighted sub-scores; penalize missing required skills.
+- explanation: 1-3 sentences, concrete, cite evidence or gaps.
 
-Deterministic skill overlap hints (use as input, you may adjust slightly):
-- Required matched: ${hints.requiredMatched.join(", ") || "none"}
-- Required missing: ${hints.requiredMissing.join(", ") || "none"}
-- Preferred matched: ${hints.preferredMatched.join(", ") || "none"}
+JOB DESCRIPTION (structured):
+${JSON.stringify(jd)}
 
-Resume JSON:
-${JSON.stringify(resume)}
+RESUME CORPUS:
+"""
+${resumeCorpus}
+"""`,
+    },
+  ];
 
-Job description JSON:
-${JSON.stringify(jobDescription)}`,
-  });
+  return {
+    stage: "match-scoring",
+    schema: MatchScoreSchema,
+    messages,
+    temperature: 0.1,
+  } as const;
 }

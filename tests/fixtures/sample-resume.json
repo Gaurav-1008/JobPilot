@@ -1,65 +1,71 @@
 {
   "contact": {
-    "name": "Alex Chen",
-    "email": "alex.chen@example.com",
-    "phone": "+1 (555) 010-2030",
-    "location": "San Francisco, CA",
-    "linkedin": "https://linkedin.com/in/alexchen",
-    "website": "https://alexchen.dev"
+    "name": "Jordan Lee",
+    "email": "jordan.lee@example.com",
+    "phone": "+1 (555) 018-2299",
+    "location": "Austin, TX",
+    "links": ["github.com/jordanlee", "linkedin.com/in/jordanlee"]
   },
-  "summary": "Software engineer with 4 years of experience building web applications and internal tools using TypeScript, React, and Node.js.",
+  "summary": "Backend engineer with 6 years building and operating high-traffic web services. Comfortable across the stack with a focus on reliable APIs, data pipelines, and developer tooling.",
   "skills": [
-    "TypeScript",
-    "JavaScript",
-    "React",
-    "Next.js",
+    "Python",
     "Node.js",
+    "TypeScript",
     "PostgreSQL",
+    "Redis",
+    "Docker",
+    "AWS",
     "REST APIs",
-    "Git",
-    "Jest"
+    "CI/CD"
   ],
   "experience": [
     {
-      "company": "Northwind Labs",
-      "title": "Software Engineer",
-      "startDate": "2022-03",
+      "company": "Brightwave Systems",
+      "title": "Senior Software Engineer",
+      "startDate": "2021-03",
       "endDate": "Present",
       "bullets": [
-        "Built customer-facing dashboards in React and TypeScript used by 12 internal teams.",
-        "Designed REST APIs in Node.js backed by PostgreSQL, reducing report generation time by 30%.",
-        "Collaborated with product and design on feature delivery in two-week agile sprints.",
-        "Wrote unit and integration tests with Jest, improving release confidence for the team."
+        "Built and maintained REST APIs in Python and Node.js serving 3M daily requests.",
+        "Reduced p95 latency on the checkout service by 40% by adding Redis caching.",
+        "Led migration of the monolith's billing module into a standalone service.",
+        "Mentored three junior engineers and ran weekly code review sessions."
       ]
     },
     {
-      "company": "Brightline Systems",
-      "title": "Junior Developer",
-      "startDate": "2020-06",
-      "endDate": "2022-02",
+      "company": "Datapeak Analytics",
+      "title": "Software Engineer",
+      "startDate": "2018-06",
+      "endDate": "2021-02",
       "bullets": [
-        "Maintained legacy JavaScript modules and migrated components to React.",
-        "Fixed production bugs and participated in on-call rotation for critical services."
+        "Developed ETL pipelines in Python processing 500GB of event data per day.",
+        "Automated deployments with GitHub Actions, cutting release time from hours to minutes.",
+        "Built an internal dashboard in React used by the analytics team daily."
       ]
     }
   ],
   "projects": [
     {
-      "name": "Open Budget Tracker",
-      "description": "Personal finance web app",
+      "name": "OpenSchedule",
+      "description": "Open-source cron-as-a-service tool.",
       "bullets": [
-        "Implemented expense categorization and CSV export with Next.js and SQLite."
-      ],
-      "technologies": ["Next.js", "TypeScript", "SQLite"]
+        "Designed a job queue backed by PostgreSQL with at-least-once delivery."
+      ]
     }
   ],
   "education": [
     {
-      "institution": "State University",
+      "institution": "University of Texas at Austin",
       "degree": "B.S.",
       "field": "Computer Science",
-      "endDate": "2020"
+      "startDate": "2014-08",
+      "endDate": "2018-05"
     }
   ],
-  "certifications": []
+  "certifications": [
+    {
+      "name": "AWS Certified Solutions Architect – Associate",
+      "issuer": "Amazon Web Services",
+      "date": "2022-09"
+    }
+  ]
 }

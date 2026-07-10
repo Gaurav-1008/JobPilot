@@ -1,62 +1,27 @@
-"use client";
-
-import type { JobDescriptionProfile } from "@/lib/schemas";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { JobDescriptionProfile } from "@/lib/schemas";
 
-type JDRequirementsSummaryProps = {
-  jobDescription: JobDescriptionProfile;
-};
-
-export function JDRequirementsSummary({ jobDescription }: JDRequirementsSummaryProps) {
-  return (
-    <div className="rounded-lg border bg-card p-4 shadow-xs">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <h3 className="text-lg font-semibold">{jobDescription.jobTitle}</h3>
-        {jobDescription.company && (
-          <span className="text-sm text-muted-foreground">@ {jobDescription.company}</span>
-        )}
-        {jobDescription.seniorityLevel && (
-          <Badge variant="secondary">{jobDescription.seniorityLevel}</Badge>
-        )}
-      </div>
-
-      <RequirementSection title="Required skills" items={jobDescription.requiredSkills} />
-      <RequirementSection title="Preferred skills" items={jobDescription.preferredSkills} />
-      <RequirementSection title="Tools" items={jobDescription.tools} />
-      <RequirementSection title="Keywords" items={jobDescription.keywords} variant="outline" />
-
-      {jobDescription.responsibilities.length > 0 && (
-        <div className="mt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Top responsibilities
-          </p>
-          <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
-            {jobDescription.responsibilities.slice(0, 4).map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+interface JDRequirementsSummaryProps {
+  jd: JobDescriptionProfile;
 }
 
-function RequirementSection({
-  title,
+function ChipRow({
+  label,
   items,
   variant = "secondary",
 }: {
-  title: string;
+  label: string;
   items: string[];
-  variant?: "secondary" | "outline";
+  variant?: "default" | "secondary" | "outline";
 }) {
   if (items.length === 0) return null;
   return (
-    <div className="mt-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="space-y-1.5">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
         {items.map((item) => (
           <Badge key={item} variant={variant}>
             {item}
@@ -64,5 +29,28 @@ function RequirementSection({
         ))}
       </div>
     </div>
+  );
+}
+
+/** Extracted JD requirements: title, skills, tools, seniority. */
+export function JDRequirementsSummary({ jd }: JDRequirementsSummaryProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{jd.jobTitle}</CardTitle>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {jd.company && <span>{jd.company}</span>}
+          {jd.seniorityLevel && (
+            <Badge variant="outline">{jd.seniorityLevel}</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <ChipRow label="Required skills" items={jd.requiredSkills} variant="default" />
+        <ChipRow label="Preferred skills" items={jd.preferredSkills} />
+        <ChipRow label="Tools" items={jd.tools} variant="outline" />
+        <ChipRow label="Keywords" items={jd.keywords} variant="outline" />
+      </CardContent>
+    </Card>
   );
 }

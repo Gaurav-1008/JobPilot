@@ -1,72 +1,41 @@
-import { v4 as uuidv4 } from "uuid";
-import { apiError } from "@/lib/api-errors";
-import { logApiEvent } from "@/lib/llm/logger";
-import { handleRouteError, okJson } from "@/lib/handle-llm-route";
-import { isLlmConfigured } from "@/lib/llm/client";
-import {
-  createMockAnalyzedRun,
-  toAnalyzeResponse,
-} from "@/lib/mock-orchestrator";
-import { runAnalyze } from "@/lib/orchestrator";
-import { saveRun } from "@/lib/run-store";
+import { NextResponse } from "next/server";
 
+import { AnalyzeRequestSchema } from "@/lib/schemas";
+import { analyze } from "@/lib/orchestrator";
+import {
+  readJson,
+  toErrorResponse,
+  BadRequestError,
+  rateLimitedResponse,
+} from "@/lib/api-errors";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
+
+// LLM work needs the Node runtime and can exceed the default function budget.
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+/**
+ * POST /api/analyze
+ * Body: { resumeText, jdText } → parse both, score original, gaps. Persists the
+ * run so /api/tailor can retrieve it by runId.
+ */
 export async function POST(request: Request) {
-  let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return apiError("Invalid JSON body", "INVALID_JSON", 400);
-  }
+    const rl = rateLimit(clientIp(request), "analyze", 10, 60_000);
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
 
-  const { resumeText, jdText } = body as {
-    resumeText?: string;
-    jdText?: string;
-  };
-
-  if (!resumeText?.trim() || !jdText?.trim()) {
-    return apiError(
-      "resumeText and jdText are required",
-      "INVALID_INPUT",
-      400
-    );
-  }
-
-  const runId = uuidv4();
-  const started = Date.now();
-
-  try {
-    if (!isLlmConfigured()) {
-      const run = createMockAnalyzedRun(resumeText, jdText, runId);
-      saveRun(run);
-      logApiEvent("analyze_complete", {
-        runId,
-        mode: "mock",
-        durationMs: Date.now() - started,
-      });
-      return okJson(toAnalyzeResponse(run));
+    const body = await readJson(request);
+    const parsed = AnalyzeRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestError(
+        "Resume and job description are both required.",
+        parsed.error.flatten(),
+      );
     }
 
-    const { run, response } = await runAnalyze(
-      resumeText.trim(),
-      jdText.trim(),
-      runId
-    );
-    saveRun(run);
-    logApiEvent("analyze_complete", {
-      runId,
-      mode: "llm",
-      durationMs: Date.now() - started,
-      parseWarningCount: run.resumeParseWarnings?.length ?? 0,
-    });
-    return okJson(response);
+    const result = await analyze(parsed.data.resumeText, parsed.data.jdText);
+    return NextResponse.json(result);
   } catch (err) {
-    logApiEvent("analyze_failed", {
-      runId,
-      durationMs: Date.now() - started,
-    });
-    return handleRouteError(err);
+    return toErrorResponse(err);
   }
 }

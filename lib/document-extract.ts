@@ -1,125 +1,109 @@
-import {
-  getMaxUploadBytes,
-  getMaxUploadMb,
-  isAllowedResumeMime,
-} from "@/lib/upload-config";
+import { BadRequestError } from "@/lib/api-errors";
 
-export type ExtractedDocument = {
+/**
+ * Extract plain text from an uploaded resume (PDF / DOCX / TXT).
+ *
+ * The extracted text feeds the existing text-based analyze pipeline, so upload
+ * and paste share one downstream path. Heavy parsers are imported dynamically so
+ * they never reach the client/edge bundle.
+ */
+
+export interface ExtractedDocument {
   text: string;
   warnings: string[];
-  mimeType: string;
-  fileName: string;
-};
-
-function detectLayoutWarnings(text: string): string[] {
-  const warnings: string[] = [];
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-
-  if (lines.length === 0) {
-    warnings.push("No text could be extracted from the file.");
-    return warnings;
-  }
-
-  const shortLines = lines.filter((l) => l.trim().length > 0 && l.trim().length < 28);
-  if (shortLines.length / lines.length > 0.45) {
-    warnings.push(
-      "Column layout may be wrong — extracted text has many short lines. Review or paste plain text if sections look scrambled."
-    );
-  }
-
-  const hasExperience = /experience|employment|work history/i.test(text);
-  const hasSkills = /skills|technical proficiencies/i.test(text);
-  if (!hasExperience && lines.length > 8) {
-    warnings.push(
-      "Experience section unclear after extraction. Verify role titles and bullet order."
-    );
-  }
-  if (!hasSkills && lines.length > 8) {
-    warnings.push(
-      "Skills section may be missing or merged — review parsed content before analyzing."
-    );
-  }
-
-  return warnings;
 }
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
+export interface UploadFile {
+  buffer: Buffer;
+  name: string;
+  type: string;
+}
+
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB ?? 5);
+export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
+function extOf(name: string): string {
+  return name.toLowerCase().split(".").pop() ?? "";
+}
+
+/** Validate size/type, then extract text and any parse warnings. */
+export async function extractResumeText(
+  file: UploadFile,
+): Promise<ExtractedDocument> {
+  if (file.buffer.length === 0) {
+    throw new BadRequestError("The uploaded file is empty.");
+  }
+  if (file.buffer.length > MAX_UPLOAD_BYTES) {
+    throw new BadRequestError(
+      `File is larger than the ${MAX_UPLOAD_MB} MB limit.`,
+    );
+  }
+
+  const ext = extOf(file.name);
+  const type = file.type;
+
+  if (type === "application/pdf" || ext === "pdf") {
+    return extractPdf(file.buffer);
+  }
+  if (
+    type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    ext === "docx"
+  ) {
+    return extractDocx(file.buffer);
+  }
+  if (type.startsWith("text/") || ext === "txt" || ext === "md") {
+    return { text: file.buffer.toString("utf8"), warnings: [] };
+  }
+  if (ext === "doc") {
+    throw new BadRequestError(
+      "Legacy .doc files aren't supported. Export as PDF or .docx, or paste the text.",
+    );
+  }
+
+  throw new BadRequestError(
+    "Unsupported file type. Upload a PDF, DOCX, or TXT — or paste the text.",
+  );
+}
+
+async function extractPdf(buffer: Buffer): Promise<ExtractedDocument> {
   const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: buffer });
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
   try {
     const result = await parser.getText();
-    return result.text ?? "";
+    const text = normalize(result.text);
+    const warnings: string[] = [];
+    if (text.length < 50) {
+      warnings.push(
+        "Very little text was extracted — this PDF may be scanned or image-based. Consider pasting the text.",
+      );
+    }
+    if (result.pages.length > 2) {
+      warnings.push(
+        "Multi-page or multi-column resumes can extract out of order; review the parsed sections.",
+      );
+    }
+    return { text, warnings };
   } finally {
     await parser.destroy();
   }
 }
 
-async function extractDocxText(buffer: Buffer): Promise<string> {
+async function extractDocx(buffer: Buffer): Promise<ExtractedDocument> {
   const mammoth = await import("mammoth");
   const result = await mammoth.extractRawText({ buffer });
-  return result.value ?? "";
+  const warnings = result.messages
+    .filter((m) => m.type === "warning")
+    .slice(0, 3)
+    .map((m) => m.message);
+  return { text: normalize(result.value), warnings };
 }
 
-export async function extractResumeFromBuffer(
-  buffer: Buffer,
-  mimeType: string,
-  fileName: string
-): Promise<ExtractedDocument> {
-  if (buffer.length > getMaxUploadBytes()) {
-    throw new Error(
-      `File exceeds maximum size of ${getMaxUploadMb()} MB.`
-    );
-  }
-
-  if (!isAllowedResumeMime(mimeType)) {
-    throw new Error(
-      "Unsupported file type. Upload PDF or DOCX only."
-    );
-  }
-
-  let text = "";
-  if (mimeType === "application/pdf") {
-    text = await extractPdfText(buffer);
-  } else {
-    text = await extractDocxText(buffer);
-  }
-
-  const normalized = text.replace(/\r\n/g, "\n").trim();
-  if (!normalized) {
-    throw new Error(
-      "Could not extract text from the file. Try pasting resume text instead."
-    );
-  }
-
-  const warnings = detectLayoutWarnings(normalized);
-
-  return {
-    text: normalized,
-    warnings,
-    mimeType,
-    fileName,
-  };
-}
-
-export async function extractResumeFromFile(
-  file: File
-): Promise<ExtractedDocument> {
-  const mimeType = file.type || guessMimeFromName(file.name);
-  if (!isAllowedResumeMime(mimeType)) {
-    throw new Error(
-      "Unsupported file type. Upload PDF or DOCX only."
-    );
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  return extractResumeFromBuffer(buffer, mimeType, file.name);
-}
-
-function guessMimeFromName(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".docx")) {
-    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  }
-  return "";
+/** Collapse excessive blank lines and trailing whitespace. */
+function normalize(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

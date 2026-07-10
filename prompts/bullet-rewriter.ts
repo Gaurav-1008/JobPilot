@@ -1,71 +1,76 @@
-import { runPrompt } from "@/lib/llm/run-prompt";
-import { LlmTailoredBulletsResponseSchema } from "@/lib/llm/response-schemas";
-import type {
-  ExperienceEntry,
-  JobDescriptionProfile,
-  ResumeGap,
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { z } from "zod";
+
+import { systemMessage } from "@/prompts/system";
+import {
+  TailoredBulletSchema,
+  type JobDescriptionProfile,
+  type ExperienceEntry,
+  type ResumeGap,
 } from "@/lib/schemas";
 
-export async function rewriteBulletsWithLlm(
-  role: ExperienceEntry,
-  jobDescription: JobDescriptionProfile,
-  gaps: ResumeGap[],
-  runId?: string
-) {
-  const gapSummary = gaps
-    .slice(0, 8)
-    .map((g) => `- ${g.name} (${g.importance}): ${g.suggestedAction}`)
-    .join("\n");
+/** json_object mode requires an object top-level, so bullets are wrapped. */
+export const BulletRewriteResponseSchema = z.object({
+  bullets: z.array(TailoredBulletSchema),
+});
 
-  return runPrompt({
-    stage: "bullet-rewriter",
-    schema: LlmTailoredBulletsResponseSchema,
-    runId,
-    temperature: 0.25,
-    userPrompt: `Rewrite these resume bullets to better align with the job description.
-
-Rules:
-- Return exactly ${role.bullets.length} bullets in the same order as the input.
-- Set "original" to the exact original bullet text (copy verbatim).
-- Do not invent metrics, employers, tools, or scope not supported by the original.
-- confidence MUST be exactly one of: "high", "medium", "low" (lowercase).
-- riskFlag: optional string only (omit or use a short phrase; never boolean).
-
-Forbidden transformations (never do these):
-- "Collaborated on APIs" → "Led organization-wide platform architecture at Google" (new employer + inflated scope)
-- "Improved performance" → "Increased revenue 40%" (new metric not in original)
-- "Built React apps" → "Expert in Kubernetes, GraphQL, and AWS" (tools not in resume)
-- "Software Engineer" → "Staff Engineer" at the same company unless that title exists in the source resume
-- Adding "MBA", "AWS Solutions Architect certified", or degrees/certs not in the resume
-
-Allowed:
-- Rephrase with JD keywords already supported by the original bullet
-- "JavaScript" ↔ "JS" when the resume uses the same technology
-- Active voice and clearer alignment without new facts
-
-Return JSON only, this shape:
-{
-  "bullets": [
-    {
-      "original": "...",
-      "tailored": "...",
-      "changeReason": "...",
-      "keywordsAddressed": ["..."],
-      "confidence": "high",
-      "riskFlag": "optional short note"
-    }
-  ]
+export interface BulletRewriteInput {
+  role: Pick<ExperienceEntry, "company" | "title" | "bullets">;
+  jd: JobDescriptionProfile;
+  gaps: ResumeGap[];
 }
 
-Role: ${role.title} at ${role.company}
+/** Rewrite one role's bullets truthfully, one TailoredBullet per original. */
+export function bulletRewriterPrompt({ role, jd, gaps }: BulletRewriteInput) {
+  const unsafeToAdd = gaps
+    .filter((g) => !g.canSafelyAdd)
+    .map((g) => g.name);
 
-Original bullets:
-${role.bullets.map((b, i) => `${i + 1}. ${b}`).join("\n")}
+  const messages: ChatCompletionMessageParam[] = [
+    systemMessage(
+      "Rewrite resume bullets to align with a job description WITHOUT fabricating anything. Return JSON only.",
+    ),
+    {
+      role: "user",
+      content: `Rewrite each bullet for this role. Return JSON: { "bullets": TailoredBullet[] } with EXACTLY one entry per original bullet, in order.
 
-Job description:
-${JSON.stringify(jobDescription)}
+TailoredBullet shape:
+{
+  "original": string,             // copy the original bullet verbatim
+  "tailored": string,             // truthful rewrite aligned to the JD
+  "changeReason": string,         // why you changed it
+  "keywordsAddressed": string[],  // JD keywords/skills this now surfaces (only if genuinely supported)
+  "confidence": "high" | "medium" | "low",
+  "riskFlag"?: string             // set when the rewrite stretches meaning; explain the risk
+}
 
-Gap context:
-${gapSummary || "None"}`,
-  });
+Rules:
+- Keep every claim traceable to the original bullet. Do not add tools/skills the bullet does not support.
+- NEVER introduce these unsupported items (candidate lacks evidence): ${unsafeToAdd.join(", ") || "(none flagged)"}.
+- Preserve any metric exactly; never invent a new number.
+- If the original already fits, you may keep it nearly unchanged with confidence "high" and an empty keywordsAddressed.
+- Use confidence "low" + a riskFlag when reframing borders on overstatement.
+
+FORBIDDEN transformations (never do these):
+- Original "Built REST APIs in Python" → "Built gRPC microservices in Go" (invents Go/gRPC).
+- Original "Improved latency by caching" → "Reduced latency 40%" (invents a metric).
+- Original "Deployed with Docker" → "Operated Kubernetes clusters in production" (invents Kubernetes).
+- Adding a degree, certification, employer, or title not in the original resume.
+
+ROLE: ${role.title} at ${role.company}
+
+TARGET JOB (structured):
+${JSON.stringify({ jobTitle: jd.jobTitle, requiredSkills: jd.requiredSkills, preferredSkills: jd.preferredSkills, keywords: jd.keywords, responsibilities: jd.responsibilities })}
+
+ORIGINAL BULLETS:
+${JSON.stringify(role.bullets)}`,
+    },
+  ];
+
+  return {
+    stage: "bullet-rewriter",
+    schema: BulletRewriteResponseSchema,
+    messages,
+    temperature: 0.4,
+  } as const;
 }

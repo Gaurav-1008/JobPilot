@@ -1,47 +1,77 @@
-# Manual test — Phase 2 (Groq)
+# Manual Test — Phase 2 (Live Groq)
+
+End-to-end check that the real LLM pipeline works against a live Groq key.
 
 ## Prerequisites
 
-1. Node 20+: `nvm use`
-2. Copy env: `cp .env.example .env`
-3. Set `GROQ_API_KEY` from [console.groq.com](https://console.groq.com)
-4. Optional: `LLM_MODEL=llama-3.3-70b-versatile` (default)
+1. A Groq API key from https://console.groq.com
+2. `.env` configured:
+   ```
+   GROQ_API_KEY=gsk_...
+   GROQ_BASE_URL=https://api.groq.com/openai/v1
+   LLM_MODEL=llama-3.3-70b-versatile
+   ```
 
-## Run
+## Automated (no key required)
 
 ```bash
-npm run dev
+npm test          # schema + scoring unit tests + orchestrator (mocked LLM)
+npm run lint
+npm run build
 ```
 
-Open http://localhost:3000/tailor
+## Live pipeline (key required)
 
-## Test checklist
+Start the dev server: `npm run dev`, then:
 
-1. Click **Load samples** → paste fields fill.
-2. Click **Analyze** → wait (30–90s) → JD summary, original score, gaps appear.
-3. Click **Generate tailored resume** → wait → side-by-side bullets with reasons and confidence.
-4. Confirm tailored match score appears (right column).
-5. Refresh page → session restores analysis/tailor state (same run id in sessionStorage).
-6. Change resume text → warning to re-analyze; tailor disabled until re-analyze.
-7. In **Export**, download tailored PDF, comparison PDF, or both — open files and verify layout.
-8. If export fails with `PDF_ENGINE_MISSING`, run `npm run pdf:install`.
-
-**Phase 3 PDF-only checklist:** see [manual-test-phase3.md](./manual-test-phase3.md).
-
-## API smoke tests
+### 1. Analyze via API
 
 ```bash
-# Analyze
 curl -s -X POST http://localhost:3000/api/analyze \
   -H "Content-Type: application/json" \
-  -d '{"resumeText":"Software engineer...","jdText":"Full stack role..."}' | jq .runId
-
-# Tailor (replace RUN_ID)
-curl -s -X POST http://localhost:3000/api/tailor \
-  -H "Content-Type: application/json" \
-  -d '{"runId":"RUN_ID"}' | jq .tailoredMatch.overallScore
+  -d '{"resumeText":"<paste resume text>","jdText":"<paste JD text>"}' | jq
 ```
 
-## Without API key
+Expect: `runId`, extracted `jobDescription`, `originalMatch` with sub-scores +
+`explanation`, and `gapAnalysis.gaps`. Note the `runId`.
 
-Unset `GROQ_API_KEY` → app falls back to Phase 1 fixture mocks (banner still shows Groq in header; responses use sample data).
+### 2. Tailor via API
+
+```bash
+curl -s -X POST http://localhost:3000/api/tailor \
+  -H "Content-Type: application/json" \
+  -d '{"runId":"<runId from step 1>"}' | jq
+```
+
+Expect: `tailoredResume` with one `TailoredBullet` per original bullet
+(`original`, `tailored`, `changeReason`, `keywordsAddressed`, `confidence`),
+`tailoredMatch`, and `warnings`.
+
+### 3. Fetch the persisted run
+
+```bash
+curl -s http://localhost:3000/api/runs/<runId> | jq '.status'   # "tailored"
+```
+
+### 4. UI walkthrough
+
+Open http://localhost:3000/tailor → **Load example** → **Analyze** → review
+score + gaps → **Generate tailored resume** → side-by-side diff with metadata.
+
+## Acceptance criteria (plan §Phase 2)
+
+- [ ] Analyze returns extracted JD requirements, original score + explanation, gaps
+- [ ] Tailor returns rewritten bullets with `changeReason`, `keywordsAddressed`, `confidence`
+- [ ] Tailored score ≥ original on the demo pair (not guaranteed for all inputs)
+- [ ] Invalid LLM JSON triggers one retry; second failure returns a clear error
+- [ ] `GET /api/runs/:id` returns the full run
+- [ ] No `GROQ_API_KEY` exposed to the client (server-only)
+
+## Error handling checks
+
+| Scenario | Expectation |
+|----------|-------------|
+| No `GROQ_API_KEY` | `503 LLM_CONFIG_ERROR` with a clear message |
+| Bad key | `502 LLM_AUTH_FAILED` |
+| Rate limited | retried with backoff, then `429 LLM_RATE_LIMIT` |
+| Unknown `runId` on tailor | `404 RUN_NOT_FOUND` |

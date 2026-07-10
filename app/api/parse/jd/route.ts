@@ -1,33 +1,25 @@
-import { apiError } from "@/lib/api-errors";
-import { handleRouteError, okJson } from "@/lib/handle-llm-route";
-import { isLlmConfigured } from "@/lib/llm/client";
-import { loadSampleJd } from "@/lib/fixtures";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
 import { parseJobDescription } from "@/services/jd-parser";
+import { readJson, toErrorResponse, BadRequestError } from "@/lib/api-errors";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const BodySchema = z.object({ text: z.string().min(1) });
+
+/** POST /api/parse/jd — body { text } → JobDescriptionProfile. */
 export async function POST(request: Request) {
-  let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return apiError("Invalid JSON body", "INVALID_JSON", 400);
-  }
-
-  const { text } = body as { text?: string };
-  if (!text?.trim()) {
-    return apiError("text is required", "INVALID_INPUT", 400);
-  }
-
-  try {
-    if (!isLlmConfigured()) {
-      return okJson({ profile: loadSampleJd() });
+    const body = await readJson(request);
+    const parsed = BodySchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestError("Job description text is required.");
     }
-
-    const profile = await parseJobDescription(text.trim());
-    return okJson({ profile });
+    const jd = await parseJobDescription(parsed.data.text);
+    return NextResponse.json(jd);
   } catch (err) {
-    return handleRouteError(err);
+    return toErrorResponse(err);
   }
 }

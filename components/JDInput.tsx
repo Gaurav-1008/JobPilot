@@ -2,12 +2,13 @@
 
 import { Textarea } from "@/components/ui/textarea";
 
-type JDInputProps = {
+interface JDInputProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
-};
+}
 
+/** Pasted job-description input. */
 export function JDInput({ value, onChange, disabled }: JDInputProps) {
   return (
     <div className="space-y-2">
@@ -16,13 +17,15 @@ export function JDInput({ value, onChange, disabled }: JDInputProps) {
       </label>
       <Textarea
         id="jd-input"
-        placeholder="Paste the full job listing text here…"
+        placeholder="Paste the job description here…"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="min-h-[220px] text-sm leading-relaxed"
-        aria-label="Job description text"
+        onChange={(e) => onChange(e.target.value)}
+        className="min-h-[240px]"
       />
+      <p className="text-xs text-muted-foreground">
+        {value.trim().length} characters
+      </p>
     </div>
   );
 }

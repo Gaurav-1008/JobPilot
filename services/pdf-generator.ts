@@ -1,70 +1,65 @@
-import {
-  buildComparisonPdfHtml,
-  buildTailoredResumeHtml,
-} from "@/lib/pdf/build-context";
-import { sanitizeFilename } from "@/lib/pdf/escape";
-import { renderHtmlToPdf } from "@/lib/pdf/renderer";
 import type { TailoringRun } from "@/lib/schemas";
+import {
+  renderComparisonHtml,
+  renderTailoredResumeHtml,
+} from "@/lib/pdf/build-context";
+import { htmlToPdf } from "@/lib/pdf/renderer";
 
-export type PdfExportType = "tailored" | "comparison";
+export type PdfType = "tailored" | "comparison";
 
-export type GeneratedPdf = {
-  type: PdfExportType;
+export interface GeneratedPdf {
+  type: PdfType;
   filename: string;
   buffer: Buffer;
-};
-
-function baseFilename(run: TailoringRun): string {
-  const title = sanitizeFilename(run.jobDescription.jobTitle);
-  const company = run.jobDescription.company
-    ? `-${sanitizeFilename(run.jobDescription.company)}`
-    : "";
-  return `${title}${company}`;
 }
 
-export async function generateTailoredPdf(run: TailoringRun): Promise<GeneratedPdf> {
-  const html = buildTailoredResumeHtml(run);
-  const buffer = await renderHtmlToPdf(html);
+function slug(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "resume"
+  );
+}
+
+/** Clean, single-column tailored resume PDF. */
+export async function generateTailoredPdf(
+  run: TailoringRun,
+): Promise<GeneratedPdf> {
+  const buffer = await htmlToPdf(renderTailoredResumeHtml(run));
   return {
     type: "tailored",
-    filename: `${baseFilename(run)}-tailored-resume.pdf`,
+    filename: `${slug(run.resume.contact.name)}-tailored.pdf`,
     buffer,
   };
 }
 
+/** Side-by-side comparison PDF — the portfolio proof artifact. */
 export async function generateComparisonPdf(
-  run: TailoringRun
+  run: TailoringRun,
 ): Promise<GeneratedPdf> {
-  const html = buildComparisonPdfHtml(run);
-  const buffer = await renderHtmlToPdf(html);
+  const buffer = await htmlToPdf(renderComparisonHtml(run));
   return {
     type: "comparison",
-    filename: `${baseFilename(run)}-comparison.pdf`,
+    filename: `${slug(run.jobDescription.jobTitle)}-comparison.pdf`,
     buffer,
   };
 }
 
+/** Generate the requested PDF types for a run. */
 export async function generatePdfs(
   run: TailoringRun,
-  types: PdfExportType[]
+  types: PdfType[],
 ): Promise<GeneratedPdf[]> {
-  const results: GeneratedPdf[] = [];
-
-  if (types.includes("tailored")) {
-    results.push(await generateTailoredPdf(run));
+  const out: GeneratedPdf[] = [];
+  // Sequential: one Chromium instance at a time keeps memory predictable.
+  for (const type of types) {
+    out.push(
+      type === "tailored"
+        ? await generateTailoredPdf(run)
+        : await generateComparisonPdf(run),
+    );
   }
-  if (types.includes("comparison")) {
-    results.push(await generateComparisonPdf(run));
-  }
-
-  return results;
-}
-
-/** For tests — ensure HTML escapes XSS in job title */
-export function previewTailoredHtml(run: TailoringRun): string {
-  return buildTailoredResumeHtml(run);
-}
-
-export function previewComparisonHtml(run: TailoringRun): string {
-  return buildComparisonPdfHtml(run);
+  return out;
 }

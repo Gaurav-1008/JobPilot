@@ -1,22 +1,12 @@
-"use client";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 
-import { useMemo, useState } from "react";
-import type { GapAnalysis, Importance } from "@/lib/schemas";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { GapAnalysis, Importance } from "@/lib/schemas";
 
-type GapAnalysisListProps = {
+interface GapAnalysisListProps {
   gapAnalysis: GapAnalysis;
-};
-
-const importanceVariant: Record<
-  Importance,
-  "high" | "medium" | "low"
-> = {
-  high: "high",
-  medium: "medium",
-  low: "low",
-};
+}
 
 const IMPORTANCE_ORDER: Record<Importance, number> = {
   high: 0,
@@ -24,91 +14,56 @@ const IMPORTANCE_ORDER: Record<Importance, number> = {
   low: 2,
 };
 
-type Filter = "all" | Importance;
+function importanceVariant(importance: Importance) {
+  if (importance === "high") return "danger" as const;
+  if (importance === "medium") return "warning" as const;
+  return "secondary" as const;
+}
 
+/** Sorted list of missing/weak requirements with truthfulness guidance. */
 export function GapAnalysisList({ gapAnalysis }: GapAnalysisListProps) {
-  const [filter, setFilter] = useState<Filter>("all");
-
-  const sorted = useMemo(
-    () =>
-      [...gapAnalysis.gaps].sort(
-        (a, b) =>
-          IMPORTANCE_ORDER[a.importance] - IMPORTANCE_ORDER[b.importance]
-      ),
-    [gapAnalysis.gaps]
+  const gaps = [...gapAnalysis.gaps].sort(
+    (a, b) => IMPORTANCE_ORDER[a.importance] - IMPORTANCE_ORDER[b.importance],
   );
 
-  const visible =
-    filter === "all"
-      ? sorted
-      : sorted.filter((g) => g.importance === filter);
-
-  if (gapAnalysis.gaps.length === 0) {
-    return (
-      <div
-        className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
-        role="status"
-      >
-        No gaps identified — strong alignment with the job description.
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">Gap analysis</h3>
-        <div
-          className="flex flex-wrap gap-1"
-          role="group"
-          aria-label="Filter gaps by importance"
-        >
-          {(["all", "high", "medium", "low"] as const).map((f) => (
-            <Button
-              key={f}
-              type="button"
-              size="sm"
-              variant={filter === f ? "default" : "outline"}
-              onClick={() => setFilter(f)}
-              aria-pressed={filter === f}
-            >
-              {f === "all" ? "All" : f}
-            </Button>
-          ))}
-        </div>
-      </div>
-      <ul className="space-y-3">
-        {visible.map((gap) => (
-          <li
+    <Card>
+      <CardHeader>
+        <CardTitle>Gap analysis</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {gaps.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No significant gaps detected.
+          </p>
+        )}
+        {gaps.map((gap) => (
+          <div
             key={gap.name}
-            className="rounded-lg border bg-card p-4 text-sm shadow-xs"
+            className="rounded-md border border-border p-3 space-y-2"
           >
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
               <span className="font-medium">{gap.name}</span>
-              <Badge variant={importanceVariant[gap.importance]}>
+              <Badge variant={importanceVariant(gap.importance)}>
                 {gap.importance}
               </Badge>
-              {!gap.canSafelyAdd && (
-                <Badge variant="outline">Do not invent</Badge>
-              )}
             </div>
-            <p className="mt-2 text-muted-foreground">
-              <span className="font-medium text-foreground">JD: </span>
-              {gap.jdEvidence}
+            <p className="text-xs text-muted-foreground">{gap.jdEvidence}</p>
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">On resume:</span>{" "}
+              {gap.resumeEvidence}
             </p>
-            <p className="mt-1 text-muted-foreground">
-              <span className="font-medium text-foreground">Resume: </span>
-              {gap.resumeEvidence || "Not mentioned"}
-            </p>
-            <p className="mt-2 text-foreground">{gap.suggestedAction}</p>
-          </li>
+            <div className="flex items-start gap-1.5 text-xs">
+              {gap.canSafelyAdd ? (
+                <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success" />
+              ) : (
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" />
+              )}
+              <span>{gap.suggestedAction}</span>
+            </div>
+          </div>
         ))}
-      </ul>
-      {visible.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No {filter} importance gaps in this run.
-        </p>
-      )}
-    </div>
+      </CardContent>
+    </Card>
   );
 }

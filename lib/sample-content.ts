@@ -1,90 +1,48 @@
-export const SAMPLE_RESUME = `Alex Chen
-alex.chen@example.com | San Francisco, CA
+/**
+ * Plain-text demo resume + JD for the "Load example" buttons.
+ * In Phase 1 the mock orchestrator ignores the text, but real-looking content
+ * makes the input step feel genuine and matches the fixture persona.
+ */
 
-SUMMARY
-Software engineer with 4 years of experience building web applications using TypeScript, React, and Node.js.
+export const DEMO_RESUME_TEXT = `Jordan Lee
+Austin, TX · jordan.lee@example.com · github.com/jordanlee
 
-SKILLS
-TypeScript, JavaScript, React, Next.js, Node.js, PostgreSQL, REST APIs, Git, Jest
+Summary
+Backend engineer with 6 years building and operating high-traffic web services,
+focused on reliable APIs, data pipelines, and developer tooling.
 
-EXPERIENCE
-Northwind Labs | Software Engineer | 2022–Present
-- Built customer-facing dashboards in React and TypeScript used by 12 internal teams.
-- Designed REST APIs in Node.js backed by PostgreSQL, reducing report generation time by 30%.
-- Collaborated with product and design on feature delivery in two-week agile sprints.
+Skills
+Python, Node.js, TypeScript, PostgreSQL, Redis, Docker, AWS, REST APIs, CI/CD
 
-Brightline Systems | Junior Developer | 2020–2022
-- Maintained legacy JavaScript modules and migrated components to React.
+Experience
+Senior Software Engineer — Brightwave Systems (2021–Present)
+- Built and maintained REST APIs in Python and Node.js serving 3M daily requests.
+- Reduced p95 latency on the checkout service by 40% by adding Redis caching.
+- Led migration of the monolith's billing module into a standalone service.
+- Mentored three junior engineers and ran weekly code review sessions.
 
-EDUCATION
-State University — B.S. Computer Science, 2020`;
+Software Engineer — Datapeak Analytics (2018–2021)
+- Developed ETL pipelines in Python processing 500GB of event data per day.
+- Automated deployments with GitHub Actions, cutting release time from hours to minutes.
+- Built an internal dashboard in React used by the analytics team daily.
 
-/** Portfolio demo copy (mirrors tests/fixtures/demo-*.txt). */
-export const DEMO_RESUME = `Alex Chen
-alex.chen@example.com | San Francisco, CA | linkedin.com/in/alexchen
+Education
+B.S. Computer Science, University of Texas at Austin (2014–2018)`;
 
-SUMMARY
-Full stack software engineer with 4 years building customer-facing web applications in TypeScript, React, and Node.js. Comfortable owning features from API design through UI delivery in agile product teams.
-
-SKILLS
-TypeScript, JavaScript, React, Next.js, Node.js, PostgreSQL, REST APIs, Git, Jest, Agile delivery, Code review
-
-EXPERIENCE
-Northwind Labs — Software Engineer — Mar 2022 – Present
-• Built customer-facing dashboards in React and TypeScript used by 12 internal teams.
-• Designed REST APIs in Node.js backed by PostgreSQL, reducing report generation time by 30%.
-• Collaborated with product and design on feature delivery in two-week agile sprints.
-• Wrote unit and integration tests with Jest, improving release confidence for the team.
-
-Brightline Systems — Junior Developer — Jun 2020 – Feb 2022
-• Maintained legacy JavaScript modules and migrated components to React.
-• Fixed production bugs and participated in on-call rotation for critical services.
-
-PROJECTS
-Open Budget Tracker — Next.js, TypeScript, SQLite
-• Personal finance app with expense categorization and CSV export.
-
-EDUCATION
-State University — B.S. Computer Science — 2020`;
-
-export const DEMO_JD = `Full Stack Engineer — Acme Corp (Remote-friendly)
+export const DEMO_JD_TEXT = `Senior Backend Engineer, Platform — Northstar Cloud
 
 About the role
-Acme Corp is hiring a Full Stack Engineer to build scalable B2B SaaS features with a modern TypeScript stack.
+Design and operate multi-tenant backend services at scale. Own service
+reliability including on-call, SLOs, and incident response. Build internal
+platform tooling that improves developer velocity.
 
-Required qualifications
-• 3+ years of professional software development experience
-• Strong TypeScript, React, and Node.js
-• Experience with PostgreSQL and REST API design
-• Comfortable collaborating with product, design, and QA in agile sprints
-• Writing tested, maintainable code (unit/integration tests)
+Requirements
+- 5+ years of backend engineering experience
+- Strong Go and distributed systems fundamentals
+- Experience running services on Kubernetes in production
+- gRPC, PostgreSQL, AWS
 
-Preferred
-• Next.js experience
-• AWS or cloud deployment exposure
-• Docker / container familiarity
-• CI/CD pipelines (GitHub Actions)
+Nice to have
+- Terraform, Kafka, observability tooling, Python
 
-Responsibilities
-• Design and implement full stack web application features
-• Improve application performance and reliability
-• Participate in code reviews and mentor junior engineers
-• Partner with product managers to deliver customer-facing improvements
-
-Keywords: full stack, scalable, agile, TypeScript, React, Node.js, PostgreSQL, REST APIs, B2B SaaS`;
-
-export const SAMPLE_JD = `Full Stack Engineer — Acme Corp
-
-We are looking for a Full Stack Engineer to design and implement scalable web applications.
-
-Required:
-- TypeScript, React, Node.js, PostgreSQL, REST APIs
-- 3+ years of professional software development
-
-Preferred:
-- Next.js, AWS, Docker, CI/CD
-
-Responsibilities:
-- Build customer-facing features with product and design partners
-- Write tested, maintainable code and participate in code reviews
-- Improve application performance and reliability`;
+Keywords: scalability, reliability, SLO, microservices, on-call, multi-tenant`;

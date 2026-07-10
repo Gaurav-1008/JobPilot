@@ -1,179 +1,168 @@
 import type OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { ZodType } from "zod";
+
 import { createLlmClient, getLlmModel } from "@/lib/llm/client";
 import { LlmError } from "@/lib/llm/errors";
-import { logLlmStage } from "@/lib/llm/logger";
-import { extractJsonString } from "@/lib/text-utils";
-import { TRUTHFULNESS_SYSTEM_PROMPT } from "@/prompts/system";
+import { logLlmCall } from "@/lib/llm/logger";
 
-export type RunPromptOptions<T> = {
+export interface RunPromptOptions<T> {
+  /** Stage label for logs (e.g. "jd-extraction"). */
   stage: string;
+  /** Zod schema the parsed JSON response must satisfy. */
   schema: ZodType<T>;
-  userPrompt: string;
-  systemPrompt?: string;
+  /** Chat messages; at least one must mention "json" for Groq json_object mode. */
+  messages: ChatCompletionMessageParam[];
   temperature?: number;
-  jsonMode?: boolean;
-  runId?: string;
-};
-
-function mapOpenAiError(err: unknown): LlmError {
-  if (err instanceof LlmError) return err;
-
-  const status = (err as { status?: number })?.status;
-  const message =
-    (err as { message?: string })?.message ?? "LLM request failed";
-
-  if (status === 401) {
-    return new LlmError(
-      "Invalid Groq API key.",
-      "LLM_AUTH_FAILED",
-      503
-    );
-  }
-  if (status === 429) {
-    return new LlmError(
-      "Groq rate limit reached. Please wait a moment and try again.",
-      "LLM_RATE_LIMIT",
-      503
-    );
-  }
-  if (status === 408 || message.toLowerCase().includes("timeout")) {
-    return new LlmError(
-      "The AI request timed out. Please try again.",
-      "LLM_TIMEOUT",
-      504
-    );
-  }
-
-  return new LlmError(message, "LLM_ERROR", 502);
+  maxTokens?: number;
+  /** Injected client (tests). Defaults to a Groq-backed OpenAI client. */
+  client?: OpenAI;
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+/** Strip ```json fences and surrounding prose the model may add. */
+function stripFences(raw: string): string {
+  let text = raw.trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  // Fall back to the outermost JSON object/array if extra prose remains.
+  const firstBrace = text.search(/[[{]/);
+  const lastBrace = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    text = text.slice(firstBrace, lastBrace + 1);
+  }
+  return text;
 }
 
-type CompletionResult = {
-  content: string;
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-};
+const MAX_BACKOFF_ATTEMPTS = 3;
 
-async function callCompletion(
+/** Map SDK/network errors to a stable LlmError, retrying 429s with backoff. */
+async function createWithBackoff(
   client: OpenAI,
-  model: string,
-  system: string,
-  user: string,
-  temperature: number,
-  jsonMode: boolean
-): Promise<CompletionResult> {
-  const response = await client.chat.completions.create({
-    model,
-    temperature,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    ...(jsonMode ? { response_format: { type: "json_object" as const } } : {}),
-  });
-
-  const content = response.choices[0]?.message?.content;
-  if (!content?.trim()) {
-    throw new LlmError("Empty response from LLM", "LLM_ERROR", 502);
-  }
-
-  return {
-    content,
-    promptTokens: response.usage?.prompt_tokens,
-    completionTokens: response.usage?.completion_tokens,
-    totalTokens: response.usage?.total_tokens,
-  };
-}
-
-export async function runPrompt<T>({
-  stage,
-  schema,
-  userPrompt,
-  systemPrompt = TRUTHFULNESS_SYSTEM_PROMPT,
-  temperature = 0.2,
-  jsonMode = true,
-  runId,
-}: RunPromptOptions<T>): Promise<T> {
-  const started = Date.now();
-  let client: OpenAI;
-  try {
-    client = createLlmClient();
-  } catch (err) {
-    throw mapOpenAiError(err);
-  }
-
-  const model = getLlmModel();
-  let lastValidationError: string | undefined;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
+  params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+  stage: string,
+): Promise<OpenAI.Chat.ChatCompletion> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_BACKOFF_ATTEMPTS; attempt++) {
     try {
-      if (attempt > 0) await sleep(800);
-
-      const retryNote = lastValidationError
-        ? `\n\nYour previous JSON failed validation:\n${lastValidationError}\nReturn corrected JSON only.`
-        : "";
-
-      const completion = await callCompletion(
-        client,
-        model,
-        systemPrompt,
-        userPrompt + retryNote,
-        temperature,
-        jsonMode
-      );
-
-      const jsonText = extractJsonString(completion.content);
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(jsonText);
-      } catch {
-        lastValidationError = "Response was not valid JSON.";
+      return await client.chat.completions.create(params);
+    } catch (err: unknown) {
+      lastErr = err;
+      const status = (err as { status?: number })?.status;
+      if (status === 401 || status === 403) {
+        throw new LlmError("LLM_AUTH_FAILED", "LLM auth failed", {
+          stage,
+          cause: err,
+        });
+      }
+      if (status === 429) {
+        // exponential backoff: 0.5s, 1s, 2s
+        await sleep(500 * 2 ** attempt);
         continue;
       }
-
-      const result = schema.safeParse(parsed);
-      if (!result.success) {
-        lastValidationError = result.error.message;
-        if (process.env.NODE_ENV !== "production") {
-          console.error(`[llm:${stage}] validation failed (attempt ${attempt + 1})`, {
-            runId,
-            error: result.error.flatten(),
-            preview: jsonText.slice(0, 500),
-          });
-        }
-        continue;
+      const isTimeout =
+        (err as { name?: string })?.name === "APIConnectionTimeoutError" ||
+        (err as { code?: string })?.code === "ETIMEDOUT";
+      if (isTimeout) {
+        throw new LlmError("LLM_TIMEOUT", "LLM request timed out", {
+          stage,
+          cause: err,
+        });
       }
-
-      logLlmStage(stage, {
-        runId,
-        model,
-        attempt: attempt + 1,
-        durationMs: Date.now() - started,
-        promptTokens: completion.promptTokens,
-        completionTokens: completion.completionTokens,
-        totalTokens: completion.totalTokens,
+      throw new LlmError("LLM_UNKNOWN", "LLM request failed", {
+        stage,
+        cause: err,
       });
-
-      return result.data;
-    } catch (err) {
-      const mapped = mapOpenAiError(err);
-      if (mapped.code === "LLM_RATE_LIMIT" && attempt === 0) {
-        await sleep(1500);
-        continue;
-      }
-      throw mapped;
     }
   }
+  throw new LlmError("LLM_RATE_LIMIT", "LLM rate limit exceeded", {
+    stage,
+    cause: lastErr,
+  });
+}
 
-  throw new LlmError(
-    `Could not produce valid structured output (${stage}). Please try again.`,
-    "LLM_VALIDATION_FAILED",
-    502,
-    lastValidationError
-  );
+/**
+ * Run a prompt and return a Zod-validated object.
+ *
+ * Uses Groq json_object response format, strips fences, validates with Zod, and
+ * retries exactly once with the validation errors fed back to the model.
+ */
+export async function runPrompt<T>(options: RunPromptOptions<T>): Promise<T> {
+  const {
+    stage,
+    schema,
+    messages,
+    temperature = 0.2,
+    maxTokens,
+    client = createLlmClient(),
+  } = options;
+
+  const model = getLlmModel();
+  const started = Date.now();
+
+  const attempt = async (
+    msgs: ChatCompletionMessageParam[],
+  ): Promise<{ text: string; usage?: OpenAI.CompletionUsage }> => {
+    const completion = await createWithBackoff(
+      client,
+      {
+        model,
+        messages: msgs,
+        temperature,
+        max_tokens: maxTokens,
+        response_format: { type: "json_object" },
+      },
+      stage,
+    );
+    return {
+      text: completion.choices[0]?.message?.content ?? "",
+      usage: completion.usage,
+    };
+  };
+
+  const parseOrThrow = (text: string): T => {
+    const json = JSON.parse(stripFences(text));
+    return schema.parse(json);
+  };
+
+  // First attempt.
+  const first = await attempt(messages);
+  try {
+    const value = parseOrThrow(first.text);
+    logLlmCall({ stage, model, ms: Date.now() - started, usage: first.usage });
+    return value;
+  } catch (firstErr) {
+    // Second attempt: feed the failure back and ask for corrected JSON.
+    const retryMessages: ChatCompletionMessageParam[] = [
+      ...messages,
+      { role: "assistant", content: first.text },
+      {
+        role: "user",
+        content: `Your previous response was not valid according to the required schema (${String(
+          (firstErr as Error).message,
+        ).slice(0, 500)}). Respond again with ONLY valid JSON matching the schema.`,
+      },
+    ];
+    const second = await attempt(retryMessages);
+    try {
+      const value = parseOrThrow(second.text);
+      logLlmCall({
+        stage,
+        model,
+        ms: Date.now() - started,
+        usage: second.usage,
+        retried: true,
+      });
+      return value;
+    } catch (secondErr) {
+      throw new LlmError(
+        "LLM_INVALID_JSON",
+        "LLM returned invalid JSON after one retry",
+        { stage, cause: secondErr },
+      );
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

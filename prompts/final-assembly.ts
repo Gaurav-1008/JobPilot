@@ -1,33 +1,49 @@
-import { runPrompt } from "@/lib/llm/run-prompt";
-import { LlmAssemblyResponseSchema } from "@/lib/llm/response-schemas";
-import type { JobDescriptionProfile, ResumeProfile } from "@/lib/schemas";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { z } from "zod";
 
-export async function assembleTailoredSections(
-  resume: ResumeProfile,
-  jobDescription: JobDescriptionProfile,
-  runId?: string
-) {
-  return runPrompt({
-    stage: "final-assembly",
-    schema: LlmAssemblyResponseSchema,
-    runId,
-    temperature: 0.2,
-    userPrompt: `Produce a tailored professional summary and reordered skills list.
+import { systemMessage } from "@/prompts/system";
+import {
+  type JobDescriptionProfile,
+  type ResumeProfile,
+} from "@/lib/schemas";
+
+/** Polished summary + reordered (not invented) skills. */
+export const FinalAssemblyResponseSchema = z.object({
+  tailoredSummary: z.string(),
+  tailoredSkills: z.array(z.string()),
+});
+
+/** Rewrite the summary and reorder skills to match the JD (truthfully). */
+export function finalAssemblyPrompt(resume: ResumeProfile, jd: JobDescriptionProfile) {
+  const messages: ChatCompletionMessageParam[] = [
+    systemMessage(
+      "Polish a resume summary and reorder skills for a target job. Do not invent skills. Return JSON only.",
+    ),
+    {
+      role: "user",
+      content: `Return JSON: { "tailoredSummary": string, "tailoredSkills": string[] }.
 
 Rules:
-- Use only skills and experience themes present in the resume.
-- Do not add technologies, degrees, certifications, employers, or metrics the resume does not support.
-- Never invent MBA/PhD/certifications or cloud tools absent from the resume.
-- Summary: 2-3 sentences, ATS-friendly, at least 40 characters.
-- tailoredSkills: JSON array of strings (not a comma-separated string); only reorder/emphasize existing skills.
+- tailoredSummary: 2-3 sentences, truthful, emphasizing overlap with the JD. Keep the candidate's real seniority.
+- tailoredSkills: REORDER the candidate's existing skills to surface JD-relevant ones first. You may drop clearly irrelevant skills, but do NOT add any skill not already present.
 
-Return JSON only:
-{ "tailoredSummary": "...", "tailoredSkills": ["skill1", "skill2"] }
+CANDIDATE SKILLS (the only skills you may use):
+${JSON.stringify(resume.skills)}
 
-Resume:
-${JSON.stringify(resume)}
+CURRENT SUMMARY:
+"""
+${resume.summary}
+"""
 
-Job description:
-${JSON.stringify(jobDescription)}`,
-  });
+TARGET JOB (structured):
+${JSON.stringify({ jobTitle: jd.jobTitle, requiredSkills: jd.requiredSkills, preferredSkills: jd.preferredSkills, keywords: jd.keywords })}`,
+    },
+  ];
+
+  return {
+    stage: "final-assembly",
+    schema: FinalAssemblyResponseSchema,
+    messages,
+    temperature: 0.3,
+  } as const;
 }

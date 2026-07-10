@@ -1,38 +1,35 @@
 {
-  "jobTitle": "Full Stack Engineer",
-  "company": "Acme Corp",
+  "jobTitle": "Senior Backend Engineer, Platform",
+  "company": "Northstar Cloud",
   "requiredSkills": [
-    "TypeScript",
-    "React",
-    "Node.js",
+    "Go",
+    "Kubernetes",
+    "Distributed systems",
     "PostgreSQL",
-    "REST APIs"
+    "gRPC",
+    "AWS"
   ],
-  "preferredSkills": [
-    "Next.js",
-    "AWS",
-    "CI/CD",
-    "Docker"
-  ],
+  "preferredSkills": ["Terraform", "Kafka", "Observability", "Python"],
   "responsibilities": [
-    "Design and implement scalable web applications across the stack.",
-    "Collaborate with product managers and designers to deliver user-facing features.",
-    "Write clean, tested code and participate in code reviews.",
-    "Improve application performance and reliability in production."
+    "Design and operate multi-tenant backend services at scale.",
+    "Own service reliability, including on-call, SLOs, and incident response.",
+    "Build internal platform tooling that improves developer velocity.",
+    "Collaborate with product teams to ship customer-facing APIs."
   ],
   "qualifications": [
-    "3+ years of professional software development experience.",
-    "Strong fundamentals in data structures, algorithms, and system design.",
-    "Experience with relational databases and API design."
+    "5+ years of backend engineering experience.",
+    "Experience running services on Kubernetes in production.",
+    "Strong grasp of distributed systems fundamentals."
   ],
-  "tools": ["Git", "Jest", "GitHub Actions"],
+  "tools": ["Kubernetes", "Terraform", "AWS", "Datadog", "GitHub Actions"],
   "keywords": [
-    "full stack",
-    "agile",
-    "code review",
-    "performance",
-    "scalable"
+    "scalability",
+    "reliability",
+    "SLO",
+    "microservices",
+    "on-call",
+    "multi-tenant"
   ],
-  "seniorityLevel": "Mid-level",
-  "domainSignals": ["B2B SaaS", "customer-facing product"]
+  "seniorityLevel": "Senior",
+  "domainSignals": ["Cloud infrastructure", "Developer platforms"]
 }

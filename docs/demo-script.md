@@ -1,52 +1,54 @@
-# Portfolio demo script — Resume Shapeshifter
+# Demo Script — Resume Shapeshifter
 
-Target runtime: **under 2 minutes** narrated. Use **Load demo (portfolio)** on `/tailor` for a curated resume + JD pair.
+A ~2-minute narrated walkthrough for a portfolio video or live demo.
 
-## Before recording
+## Setup (before recording)
 
-1. `nvm use` && `npm install`
-2. Set `GROQ_API_KEY` in `.env`
-3. `npm run dev` → http://localhost:3000
-4. Optional: `npm run pdf:install` if you will export PDFs on camera
+```bash
+npm install
+npm run pdf:install                 # one-time Chromium for PDF export
+cp .env.example .env                # set GROQ_API_KEY
+npm run dev                         # http://localhost:3000
+```
 
-## Scene 1 — Problem (15s)
+## Script
 
-- Open landing page.
-- Say: “Applying with one static resume misses JD keywords; inventing experience is risky.”
+**1. Landing (10s)**
+> "Resume Shapeshifter tailors your resume to a specific job — truthfully. No
+> invented employers, degrees, or metrics." Click **Start tailoring**.
 
-## Scene 2 — Input (20s)
-
-- Click **Get started** → `/tailor`.
-- Click **Load demo (portfolio)** (fills resume + JD).
-- Mention you can also **upload PDF/DOCX** or paste text.
+**2. Input (20s)**
+- Click **Load example** (or **Upload PDF/DOCX** to show ingestion of a real file).
+> "I'll paste a backend engineer's resume and a senior platform role that asks for
+> Go and Kubernetes — skills this candidate doesn't have."
 - Click **Analyze**.
 
-## Scene 3 — Analysis (30s)
-
-- Redirect lands on `/tailor/[runId]/analysis`.
-- Point out: JD requirements summary, **original match score**, gap list (filter by high/medium).
+**3. Analysis (25s)**
+> "It extracts the job's requirements, scores the original resume — 61 — and
+> explains why. The gap analysis is honest: Go, Kubernetes, and gRPC are missing,
+> and it tells me *not* to fabricate them."
 - Click **Generate tailored resume**.
 
-## Scene 4 — Review (35s)
+**4. Review (40s)**
+> "Now the score jumps to 78 — not by lying, but by reframing real experience
+> around reliability, microservices, and distributed systems."
+- Scroll the side-by-side diff.
+> "Every bullet shows the original, the rewrite, why it changed, and a confidence
+> level. Where the model stretched — like inferring SLOs — the guardrails flagged
+> it, lowered the confidence, and added a risk note."
+- Point out a yellow-highlighted change and a risk-flagged bullet.
 
-- On `/tailor/[runId]/review`: side-by-side bullets, confidence badges, guardrail warnings if any.
-- Highlight one bullet: what changed and why (change reason + keywords).
-- Note tailored score vs original.
+**5. Export (20s)**
+> "Before I can export, I have to confirm I've verified the content is truthful."
+- Check the box → click **Both**.
+> "I get a clean, ATS-friendly resume and a side-by-side comparison PDF — the
+> proof artifact showing the before/after with scores, highlights, and gaps."
+- Open the comparison PDF.
 
-## Scene 5 — Export (20s)
+**6. Close (5s)**
+> "Truthful tailoring, explainable scoring, and a shareable proof — end to end."
 
-- **Continue to export** → `/tailor/[runId]/export`.
-- Check **I have verified all content is truthful**.
-- Download **Comparison PDF** — portfolio proof artifact with disclaimer footer.
+## Fallback (no Groq key)
 
-## Closing (10s)
-
-- “Truthful tailoring with scores, gaps, guardrails, and exportable proof — not a black-box rewrite.”
-
-## Fallbacks
-
-| Issue | Action |
-|-------|--------|
-| Groq key missing | App uses mock data; say “offline demo mode” |
-| PDF export fails | Run `npm run pdf:install`; or export locally only |
-| Rate limit | Wait 60s or restart dev server |
+Run `npm test` to show the pipeline working against mocked LLM + real PDF
+rendering, or open a pre-generated comparison PDF.

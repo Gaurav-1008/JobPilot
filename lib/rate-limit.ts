@@ -1,55 +1,53 @@
-type Bucket = {
-  count: number;
-  resetAt: number;
+/**
+ * Minimal in-memory fixed-window rate limiter, keyed by client IP + bucket.
+ *
+ * MVP-grade: per-process only (resets on restart, not shared across serverless
+ * instances). Good enough to protect the expensive LLM/PDF routes during a demo;
+ * swap for a shared store (Redis/Upstash) if deployed at scale.
+ */
+const globalBuckets = globalThis as unknown as {
+  __rsRateBuckets?: Map<string, { count: number; resetAt: number }>;
 };
+const buckets =
+  globalBuckets.__rsRateBuckets ??
+  new Map<string, { count: number; resetAt: number }>();
+if (!globalBuckets.__rsRateBuckets) globalBuckets.__rsRateBuckets = buckets;
 
-const buckets = new Map<string, Bucket>();
-
-const WINDOW_MS = 60_000;
-const DEFAULT_LIMIT = 10;
-
-function getLimit(): number {
-  const raw = process.env.API_RATE_LIMIT_PER_MIN;
-  const n = raw ? Number.parseInt(raw, 10) : DEFAULT_LIMIT;
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_LIMIT;
+export interface RateLimitResult {
+  ok: boolean;
+  retryAfterSec: number;
 }
 
-export function getClientKey(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() ?? "unknown";
+/** Return the client IP from standard proxy headers, falling back to "local". */
+export function clientIp(request: Request): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
   return request.headers.get("x-real-ip") ?? "local";
 }
 
-export type RateLimitResult =
-  | { allowed: true }
-  | { allowed: false; retryAfterSec: number };
-
-export function checkRateLimit(
+/**
+ * Allow up to `limit` requests per `windowMs` for a given key.
+ * @param bucket logical route name so different routes have separate budgets.
+ */
+export function rateLimit(
   key: string,
-  route: string
+  bucket: string,
+  limit: number,
+  windowMs: number,
 ): RateLimitResult {
-  const limit = getLimit();
-  const bucketKey = `${route}:${key}`;
   const now = Date.now();
-  const existing = buckets.get(bucketKey);
+  const id = `${bucket}:${key}`;
+  const entry = buckets.get(id);
 
-  if (!existing || now >= existing.resetAt) {
-    buckets.set(bucketKey, { count: 1, resetAt: now + WINDOW_MS });
-    return { allowed: true };
+  if (!entry || now >= entry.resetAt) {
+    buckets.set(id, { count: 1, resetAt: now + windowMs });
+    return { ok: true, retryAfterSec: 0 };
   }
 
-  if (existing.count >= limit) {
-    return {
-      allowed: false,
-      retryAfterSec: Math.ceil((existing.resetAt - now) / 1000),
-    };
+  if (entry.count >= limit) {
+    return { ok: false, retryAfterSec: Math.ceil((entry.resetAt - now) / 1000) };
   }
 
-  existing.count += 1;
-  return { allowed: true };
-}
-
-/** Test helper */
-export function resetRateLimits(): void {
-  buckets.clear();
+  entry.count += 1;
+  return { ok: true, retryAfterSec: 0 };
 }

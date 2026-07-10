@@ -1,34 +1,58 @@
-# Deployment quick reference
+# Deployment
 
-**Full plan:** [deployment-plan.md](./deployment-plan.md) — prerequisites, Vercel setup, serverless limits, verification, and troubleshooting.
+## Environment variables (production checklist)
 
-## Recommended host
+| Var | Required | Notes |
+|-----|----------|-------|
+| `GROQ_API_KEY` | ✅ | Server-only. Never expose to the client. |
+| `GROQ_BASE_URL` | – | Defaults to `https://api.groq.com/openai/v1`. |
+| `LLM_MODEL` | – | Defaults to `llama-3.3-70b-versatile`. |
+| `LLM_TIMEOUT_MS` | – | Per-call timeout (default 45000). |
+| `MAX_UPLOAD_MB` | – | Resume upload limit (default 5). |
 
-- **Vercel** — Next.js App Router + API routes
-- **Groq** — `GROQ_API_KEY` server-side only
+- [ ] `GROQ_API_KEY` set as an encrypted secret (not committed, not `NEXT_PUBLIC_`)
+- [ ] `npm run build` passes
+- [ ] `npm test` passes
+- [ ] PDF export target decided (see below)
 
-## Hobby plan limits
+## The PDF / Chromium constraint
 
-- **Memory:** max **2048 MB** per function (`vercel.json` uses 2048 for PDF export, 1024 for others).
-- **Duration:** Hobby functions are often capped at **10s**; `/api/tailor` requests **180s** and may need **Pro** for long LLM runs.
+PDF export uses **Playwright + headless Chromium**, which does **not** fit in a
+standard Vercel serverless function (no system Chromium, 50 MB bundle cap).
+Options:
 
-## Vercel setup (summary)
+1. **Node host (recommended)** — Deploy to Railway / Render / Fly / a VM where
+   `npm run pdf:install` provides Chromium. Everything works as-is.
+2. **Vercel + serverless Chromium** — Swap `lib/pdf/renderer.ts` to launch
+   `playwright-core` with `@sparticuz/chromium`:
+   ```ts
+   import chromium from "@sparticuz/chromium";
+   import { chromium as pw } from "playwright-core";
+   const browser = await pw.launch({
+     executablePath: await chromium.executablePath(),
+     args: chromium.args,
+   });
+   ```
+   Keep the `htmlToPdf(html)` signature identical — only the launch changes.
+3. **Separate PDF microservice** — Run the renderer as a small dedicated service
+   and call it from `/api/export/pdf`.
 
-1. Import Git repo → Framework: **Next.js** → Node **20** (`.nvmrc`).
-2. Set `GROQ_API_KEY` (required). See [.env.example](../.env.example) for optional vars.
-3. Deploy → run the [post-deploy checklist](./deployment-plan.md#7-post-deploy-verification) in the deployment plan.
+The rest of the app (analyze, tailor, guardrails) runs fine on Vercel serverless
+with `runtime = "nodejs"` and the `maxDuration` already set on each route.
 
-## PDF on Vercel
+## Persistence caveat
 
-Serverless PDF uses `playwright-core` + `@sparticuz/chromium` (see `lib/pdf/launch-browser.ts`). If export fails, set `AWS_LAMBDA_JS_RUNTIME=nodejs22.x` in the Vercel dashboard and see [deployment-plan.md §6.2](./deployment-plan.md#62-pdf-export-playwright--chromium).
+`lib/run-store.ts` and `lib/rate-limit.ts` are **in-memory per process**. On
+serverless they reset between invocations, so a run created by `/api/analyze` may
+not be found by a later `/api/tailor` call on a cold instance. For production,
+back both with a shared store (SQLite for a single node; Redis/Upstash or
+Postgres/Supabase for multi-instance). See architecture §11.2.
 
-## Health check
-
-`GET /api/health` — returns `llmConfigured`, `pdfReady`, and `serverless` flags for deploy smoke tests.
-
-## Local smoke test
+## Deploy steps (Node host)
 
 ```bash
-npm run build && npm run start
-# http://localhost:3000/tailor → Load demo → Analyze → Tailor → Export
+npm ci
+npm run build
+npm run pdf:install        # Chromium for PDF export
+npm start                  # serves the production build
 ```

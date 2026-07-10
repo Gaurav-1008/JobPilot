@@ -1,23 +1,22 @@
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+
+import { systemMessage } from "@/prompts/system";
 import { JobDescriptionProfileSchema } from "@/lib/schemas";
-import { runPrompt } from "@/lib/llm/run-prompt";
-import { truncateText } from "@/lib/text-utils";
 
-export async function extractJobDescription(
-  jdText: string,
-  runId?: string
-) {
-  const trimmed = truncateText(jdText, 12_000);
+/** Extract a structured JobDescriptionProfile from raw JD text. */
+export function jdExtractionPrompt(jdText: string) {
+  const messages: ChatCompletionMessageParam[] = [
+    systemMessage(
+      "Extract structured requirements from a job description into JSON.",
+    ),
+    {
+      role: "user",
+      content: `Extract the following JSON fields from this job description. Use empty arrays/strings when a field is absent. Deduplicate skills. Normalize seniorityLevel to one of: Intern, Junior, Mid, Senior, Staff, Principal, Lead, Manager (best fit).
 
-  return runPrompt({
-    stage: "jd-extraction",
-    schema: JobDescriptionProfileSchema,
-    runId,
-    userPrompt: `Extract structured job requirements from this job description.
-
-Return JSON matching this shape:
+JSON shape:
 {
-  "jobTitle": string (required),
-  "company": string (optional),
+  "jobTitle": string,
+  "company": string | omitted,
   "requiredSkills": string[],
   "preferredSkills": string[],
   "responsibilities": string[],
@@ -28,9 +27,17 @@ Return JSON matching this shape:
   "domainSignals": string[]
 }
 
-Job description:
+JOB DESCRIPTION:
 """
-${trimmed}
+${jdText}
 """`,
-  });
+    },
+  ];
+
+  return {
+    stage: "jd-extraction",
+    schema: JobDescriptionProfileSchema,
+    messages,
+    temperature: 0.1,
+  } as const;
 }

@@ -1,5 +1,9 @@
-import { TailorInputView } from "@/components/tailor/TailorInputView";
+import { TailorFlow } from "@/components/tailor/TailorFlow";
+
+export const metadata = {
+  title: "Tailor · Resume Shapeshifter",
+};
 
 export default function TailorPage() {
-  return <TailorInputView />;
+  return <TailorFlow />;
 }
