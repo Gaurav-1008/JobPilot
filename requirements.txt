@@ -1,0 +1,12 @@
+# Core (MVP)
+python-dotenv>=1.0,<2.0
+
+# Phase 8 stretch goals — optional. Install only the ones you use:
+#   USE_LLM=true (LLM email rewriting)
+# anthropic>=0.116
+#   PROVIDER=gmail (Gmail API draft/send)
+# google-api-python-client>=2.0
+# google-auth-httplib2>=0.2
+# google-auth-oauthlib>=1.0
+#   Streamlit UI (streamlit run ui/app.py)
+# streamlit>=1.30

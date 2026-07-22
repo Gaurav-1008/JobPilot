@@ -1,0 +1,55 @@
+[
+  {
+    "recipient_name": "Priya Sharma",
+    "recipient_email": "priya.sharma@example.com",
+    "company": "Acme AI",
+    "role": "Backend Engineering Intern",
+    "job_url": "https://careers.example.com/acme-ai/backend-intern",
+    "personalization_note": "I enjoyed reading about Acme AI's new workflow automation product.",
+    "candidate_name": "Alex Morgan",
+    "candidate_background": "Python development for automation tools and AI-assisted workflows",
+    "portfolio_url": "https://github.com/alexmorgan"
+  },
+  {
+    "recipient_name": "Daniel Lee",
+    "recipient_email": "daniel.lee@example.com",
+    "company": "Northstar Labs",
+    "role": "Software Engineering Intern",
+    "personalization_note": "Northstar Labs' focus on dependable developer tools caught my attention.",
+    "candidate_name": "Alex Morgan",
+    "candidate_background": "Python development that turns repetitive tasks into simple tools",
+    "linkedin_url": "https://www.linkedin.com/in/alexmorgan"
+  },
+  {
+    "recipient_name": "Samir Patel",
+    "recipient_email": "samir.patel@example.com",
+    "company": "Harbor Health",
+    "role": "Platform Engineering Intern",
+    "job_url": "https://jobs.example.com/harbor-health/platform-intern",
+    "personalization_note": "I was interested in Harbor Health's effort to make care operations easier for clinical teams.",
+    "candidate_name": "Alex Morgan",
+    "candidate_background": "Python development for reliable automation and thoughtful internal tooling",
+    "portfolio_url": "https://github.com/alexmorgan"
+  },
+  {
+    "recipient_name": "Maya Chen",
+    "recipient_email": "maya.chen@example.com",
+    "company": "Terra Grid",
+    "role": "Data Engineering Intern",
+    "candidate_name": "Alex Morgan",
+    "candidate_background": "building data workflows and automation projects with Python",
+    "portfolio_url": "https://github.com/alexmorgan",
+    "resume_link": "https://example.com/alex-morgan-resume.pdf"
+  },
+  {
+    "recipient_name": "Jordan Rivera",
+    "recipient_email": "jordan.rivera@example.com",
+    "company": "Cedar Commerce",
+    "role": "Product Engineering Intern",
+    "job_url": "https://careers.example.com/cedar-commerce/product-engineering-intern",
+    "personalization_note": "Cedar Commerce's work on smoother checkout experiences feels especially practical.",
+    "candidate_name": "Alex Morgan",
+    "candidate_background": "practical automation and product-minded engineering with Python",
+    "portfolio_url": "https://github.com/alexmorgan"
+  }
+]
