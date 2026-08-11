@@ -1,0 +1,8 @@
+.env
+outreach_log.csv
+__pycache__/
+*.py[cod]
+
+# Phase 8: Gmail OAuth secrets — never commit these.
+credentials.json
+token.json
