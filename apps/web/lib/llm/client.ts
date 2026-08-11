@@ -25,7 +25,10 @@ export function createLlmClient(): OpenAI {
 }
 
 export function getLlmModel(): string {
-  return process.env.LLM_MODEL ?? "llama-3.3-70b-versatile";
+  // EC-P0-04: renamed from LLM_MODEL. The Closer uses that same name for its
+  // Claude model; in a merged deployment whichever service read it last won,
+  // and the failure was a wrong-model call rather than a crash.
+  return process.env.TAILORING_MODEL ?? "llama-3.3-70b-versatile";
 }
 
 /** True when an LLM provider is configured (used to gate live vs. clear error). */

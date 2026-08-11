@@ -1,0 +1,48 @@
+# JobPilot — resolved Python dependency set for service ④
+#
+# EC-P0-05: merged from the two source requirements files, which conflicted:
+#   harvester/requirements.txt   entirely UNPINNED (requests, playwright, lxml...)
+#   outreach/requirements.txt    pinned python-dotenv>=1.0,<2.0
+#
+# An unpinned Playwright is the specific risk called out in EC-P0-05: a minor
+# bump can silently change selector behavior in naukri.py, and the symptom is
+# zero rows with HTTP 200 (EC-P2-06) — indistinguishable from an empty search.
+# Everything below is pinned. Bump deliberately, then re-run the cassette tests.
+#
+# EC-P0-06: Python floor is 3.10+ (The Closer's requirement; harvester claimed
+# 3.8+ but was never tested above it — run its tests on 3.10 before trusting
+# the "unchanged" marker).
+
+# ── Shared ────────────────────────────────────────────────────────────
+python-dotenv>=1.0,<2.0
+
+# ── Service ④ (FastAPI wrapper, P2.1.1) ──────────────────────────────
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+pydantic>=2.9,<3.0          # EC-P0-19: v2 explicitly; codegen targets v2
+
+# ── Harvester: scraping (from job-harvester, now pinned) ─────────────
+requests>=2.32,<3.0
+beautifulsoup4>=4.12,<5.0
+lxml>=5.3,<6.0
+playwright>=1.48,<2.0       # pinned: see EC-P0-05 note above
+firecrawl-py>=1.5,<2.0
+pyyaml>=6.0,<7.0
+
+# ── Outreach: delivery (from cold-email-sender, Phase 8 stretch) ─────
+# These were commented out as optional in the source. In the platform they are
+# no longer optional: PROVIDER=gmail is the default send path (P5.5.3).
+anthropic>=0.40             # optional at runtime; absent => template fallback
+google-api-python-client>=2.0
+google-auth-httplib2>=0.2
+google-auth-oauthlib>=1.0
+
+# ── Dropped from harvester ───────────────────────────────────────────
+# gspread, google-auth  — Google Sheets output. writers.py is RETIRED (⚫);
+#   the database replaces CSV/Sheets output. Re-add only if Sheets export
+#   returns as a feature.
+# streamlit             — ui/app.py is RETIRED (⚫), replaced by the React
+#   outreach screen in P5.3.4.
+
+# ── Test ─────────────────────────────────────────────────────────────
+pytest>=8.3,<9.0

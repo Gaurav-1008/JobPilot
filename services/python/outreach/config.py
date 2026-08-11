@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from dotenv import load_dotenv
@@ -133,7 +133,10 @@ def load_config() -> AppConfig:
         opt_out_path=_read("OPT_OUT_PATH", "do_not_contact.csv"),
         dedupe=_parse_bool("DEDUPE", _read("DEDUPE", "false")),
         use_llm=_parse_bool("USE_LLM", _read("USE_LLM", "false")),
-        llm_model=_read("LLM_MODEL", "claude-opus-4-8"),
+        # EC-P0-04: renamed from LLM_MODEL. Resume-Builder uses that same name
+        # for its Groq tailoring model; in a merged deployment whichever service
+        # read it last won, and the failure was a wrong-model call, not a crash.
+        llm_model=_read("EMAIL_LLM_MODEL", "claude-opus-4-8"),
         anthropic_api_key=_read("ANTHROPIC_API_KEY"),
         gmail_credentials_path=_read("GMAIL_CREDENTIALS_PATH", "credentials.json"),
         gmail_token_path=_read("GMAIL_TOKEN_PATH", "token.json"),
@@ -144,4 +147,28 @@ def load_config() -> AppConfig:
     if not config.log_path:
         raise ConfigurationError("LOG_PATH cannot be empty.")
 
+    config = _force_dry_run_in_unsafe_environments(config)
+    return config
+
+
+# Environments that must never be able to email a real person, whatever the
+# operator or a stray .env says. Production is deliberately absent.
+_FORCED_DRY_RUN_ENVS = frozenset({"local", "test", "ci", "staging"})
+
+
+def _force_dry_run_in_unsafe_environments(config: AppConfig) -> AppConfig:
+    """Override DRY_RUN=false outside production (P0.4.4, EC-P0-27, EC-P7-23).
+
+    The override is applied here, at the end of ``load_config()``, rather than
+    at module import — a value captured at import time cannot be exercised by a
+    test that patches the environment afterwards, which is the specific trap
+    EC-P0-27 describes.
+
+    Staging is included on purpose: architecture.md §17 requires staging to force
+    dry-run at the platform level, ignoring per-user settings, so that a staging
+    bug cannot reach a real inbox.
+    """
+    env = _read("JOBPILOT_ENV", "local").strip().lower()
+    if env in _FORCED_DRY_RUN_ENVS and not config.dry_run:
+        return replace(config, dry_run=True)
     return config
