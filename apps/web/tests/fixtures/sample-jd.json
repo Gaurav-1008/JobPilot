@@ -1,0 +1,35 @@
+{
+  "jobTitle": "Senior Backend Engineer, Platform",
+  "company": "Northstar Cloud",
+  "requiredSkills": [
+    "Go",
+    "Kubernetes",
+    "Distributed systems",
+    "PostgreSQL",
+    "gRPC",
+    "AWS"
+  ],
+  "preferredSkills": ["Terraform", "Kafka", "Observability", "Python"],
+  "responsibilities": [
+    "Design and operate multi-tenant backend services at scale.",
+    "Own service reliability, including on-call, SLOs, and incident response.",
+    "Build internal platform tooling that improves developer velocity.",
+    "Collaborate with product teams to ship customer-facing APIs."
+  ],
+  "qualifications": [
+    "5+ years of backend engineering experience.",
+    "Experience running services on Kubernetes in production.",
+    "Strong grasp of distributed systems fundamentals."
+  ],
+  "tools": ["Kubernetes", "Terraform", "AWS", "Datadog", "GitHub Actions"],
+  "keywords": [
+    "scalability",
+    "reliability",
+    "SLO",
+    "microservices",
+    "on-call",
+    "multi-tenant"
+  ],
+  "seniorityLevel": "Senior",
+  "domainSignals": ["Cloud infrastructure", "Developer platforms"]
+}

@@ -1,0 +1,250 @@
+{
+  "id": "mock-run-0001",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "status": "tailored",
+  "resume": {
+    "contact": {
+      "name": "Jordan Lee",
+      "email": "jordan.lee@example.com",
+      "phone": "+1 (555) 018-2299",
+      "location": "Austin, TX",
+      "links": ["github.com/jordanlee", "linkedin.com/in/jordanlee"]
+    },
+    "summary": "Backend engineer with 6 years building and operating high-traffic web services. Comfortable across the stack with a focus on reliable APIs, data pipelines, and developer tooling.",
+    "skills": [
+      "Python",
+      "Node.js",
+      "TypeScript",
+      "PostgreSQL",
+      "Redis",
+      "Docker",
+      "AWS",
+      "REST APIs",
+      "CI/CD"
+    ],
+    "experience": [
+      {
+        "company": "Brightwave Systems",
+        "title": "Senior Software Engineer",
+        "startDate": "2021-03",
+        "endDate": "Present",
+        "bullets": [
+          "Built and maintained REST APIs in Python and Node.js serving 3M daily requests.",
+          "Reduced p95 latency on the checkout service by 40% by adding Redis caching.",
+          "Led migration of the monolith's billing module into a standalone service.",
+          "Mentored three junior engineers and ran weekly code review sessions."
+        ]
+      },
+      {
+        "company": "Datapeak Analytics",
+        "title": "Software Engineer",
+        "startDate": "2018-06",
+        "endDate": "2021-02",
+        "bullets": [
+          "Developed ETL pipelines in Python processing 500GB of event data per day.",
+          "Automated deployments with GitHub Actions, cutting release time from hours to minutes.",
+          "Built an internal dashboard in React used by the analytics team daily."
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "OpenSchedule",
+        "description": "Open-source cron-as-a-service tool.",
+        "bullets": [
+          "Designed a job queue backed by PostgreSQL with at-least-once delivery."
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "University of Texas at Austin",
+        "degree": "B.S.",
+        "field": "Computer Science",
+        "startDate": "2014-08",
+        "endDate": "2018-05"
+      }
+    ],
+    "certifications": [
+      {
+        "name": "AWS Certified Solutions Architect – Associate",
+        "issuer": "Amazon Web Services",
+        "date": "2022-09"
+      }
+    ]
+  },
+  "jobDescription": {
+    "jobTitle": "Senior Backend Engineer, Platform",
+    "company": "Northstar Cloud",
+    "requiredSkills": [
+      "Go",
+      "Kubernetes",
+      "Distributed systems",
+      "PostgreSQL",
+      "gRPC",
+      "AWS"
+    ],
+    "preferredSkills": ["Terraform", "Kafka", "Observability", "Python"],
+    "responsibilities": [
+      "Design and operate multi-tenant backend services at scale.",
+      "Own service reliability, including on-call, SLOs, and incident response.",
+      "Build internal platform tooling that improves developer velocity.",
+      "Collaborate with product teams to ship customer-facing APIs."
+    ],
+    "qualifications": [
+      "5+ years of backend engineering experience.",
+      "Experience running services on Kubernetes in production.",
+      "Strong grasp of distributed systems fundamentals."
+    ],
+    "tools": ["Kubernetes", "Terraform", "AWS", "Datadog", "GitHub Actions"],
+    "keywords": [
+      "scalability",
+      "reliability",
+      "SLO",
+      "microservices",
+      "on-call",
+      "multi-tenant"
+    ],
+    "seniorityLevel": "Senior",
+    "domainSignals": ["Cloud infrastructure", "Developer platforms"]
+  },
+  "originalMatch": {
+    "overallScore": 61,
+    "skillCoverageScore": 55,
+    "responsibilityAlignmentScore": 64,
+    "keywordScore": 58,
+    "seniorityScore": 80,
+    "criticalMissingRequirements": ["Go", "Kubernetes", "gRPC"],
+    "explanation": "Strong backend and AWS foundation with clear senior-level scope, but the resume does not evidence Go, Kubernetes, or gRPC, which are required. Reliability/on-call ownership is implied but not stated explicitly."
+  },
+  "tailoredResume": {
+    "tailoredSummary": "Senior backend engineer with 6 years designing, scaling, and operating high-traffic multi-tenant services on AWS. Focused on service reliability, API design, and developer platform tooling.",
+    "tailoredSkills": [
+      "Python",
+      "Node.js",
+      "TypeScript",
+      "PostgreSQL",
+      "Redis",
+      "Docker",
+      "AWS",
+      "REST APIs",
+      "CI/CD",
+      "Distributed systems",
+      "Microservices"
+    ],
+    "tailoredExperience": [
+      {
+        "company": "Brightwave Systems",
+        "title": "Senior Software Engineer",
+        "bullets": [
+          {
+            "original": "Built and maintained REST APIs in Python and Node.js serving 3M daily requests.",
+            "tailored": "Designed and operated REST APIs in Python and Node.js serving 3M daily requests across a multi-tenant platform.",
+            "changeReason": "Surface scale and multi-tenant framing to align with the platform responsibilities in the JD.",
+            "keywordsAddressed": ["multi-tenant", "scalability"],
+            "confidence": "high"
+          },
+          {
+            "original": "Reduced p95 latency on the checkout service by 40% by adding Redis caching.",
+            "tailored": "Improved service reliability by cutting checkout p95 latency 40% via Redis caching, protecting SLOs during peak load.",
+            "changeReason": "Reframe a real optimization around reliability and SLOs, terms the JD emphasizes.",
+            "keywordsAddressed": ["reliability", "SLO"],
+            "confidence": "medium",
+            "riskFlag": "SLO framing is inferred; confirm you tracked formal SLOs."
+          },
+          {
+            "original": "Led migration of the monolith's billing module into a standalone service.",
+            "tailored": "Led decomposition of the billing monolith into an independently deployed microservice, improving isolation and release cadence.",
+            "changeReason": "Introduce 'microservice' terminology matching the JD's microservices keyword.",
+            "keywordsAddressed": ["microservices"],
+            "confidence": "high"
+          },
+          {
+            "original": "Mentored three junior engineers and ran weekly code review sessions.",
+            "tailored": "Mentored three engineers and drove code-review standards, raising team velocity and code quality.",
+            "changeReason": "Tighten wording; connect mentorship to developer velocity, a stated responsibility.",
+            "keywordsAddressed": [],
+            "confidence": "high"
+          }
+        ]
+      },
+      {
+        "company": "Datapeak Analytics",
+        "title": "Software Engineer",
+        "bullets": [
+          {
+            "original": "Developed ETL pipelines in Python processing 500GB of event data per day.",
+            "tailored": "Built distributed ETL pipelines in Python processing 500GB/day, applying distributed-systems patterns for throughput and fault tolerance.",
+            "changeReason": "Highlight distributed-systems experience, a required qualification, from genuine pipeline work.",
+            "keywordsAddressed": ["distributed systems", "scalability"],
+            "confidence": "medium",
+            "riskFlag": "Verify the pipeline was truly distributed vs single-node."
+          },
+          {
+            "original": "Automated deployments with GitHub Actions, cutting release time from hours to minutes.",
+            "tailored": "Automated CI/CD with GitHub Actions, cutting release time from hours to minutes and enabling safer, more frequent deploys.",
+            "changeReason": "Keep the metric; connect to reliability and deploy safety.",
+            "keywordsAddressed": ["reliability"],
+            "confidence": "high"
+          },
+          {
+            "original": "Built an internal dashboard in React used by the analytics team daily.",
+            "tailored": "Built internal tooling (React dashboard) that improved analytics-team developer velocity.",
+            "changeReason": "Frame internal tooling around developer velocity per the platform-tooling responsibility.",
+            "keywordsAddressed": [],
+            "confidence": "high"
+          }
+        ]
+      }
+    ]
+  },
+  "tailoredMatch": {
+    "overallScore": 78,
+    "skillCoverageScore": 70,
+    "responsibilityAlignmentScore": 82,
+    "keywordScore": 84,
+    "seniorityScore": 85,
+    "criticalMissingRequirements": ["Go", "Kubernetes", "gRPC"],
+    "explanation": "Reframing existing experience around reliability, microservices, and distributed systems lifts responsibility and keyword alignment substantially. Go, Kubernetes, and gRPC remain genuine gaps and were not fabricated."
+  },
+  "gapAnalysis": {
+    "gaps": [
+      {
+        "name": "Go",
+        "importance": "high",
+        "jdEvidence": "Required skill: Go.",
+        "resumeEvidence": "No Go experience found; primary languages are Python and Node.js.",
+        "suggestedAction": "Do not claim Go. If you have any Go exposure, add it truthfully; otherwise prepare to discuss language transferability.",
+        "canSafelyAdd": false
+      },
+      {
+        "name": "Kubernetes",
+        "importance": "high",
+        "jdEvidence": "Required skill and qualification: run services on Kubernetes in production.",
+        "resumeEvidence": "Docker experience present, but no Kubernetes.",
+        "suggestedAction": "Add only if you have real K8s experience. Consider a note on container orchestration exposure via Docker.",
+        "canSafelyAdd": false
+      },
+      {
+        "name": "gRPC",
+        "importance": "medium",
+        "jdEvidence": "Required skill: gRPC.",
+        "resumeEvidence": "REST API experience only.",
+        "suggestedAction": "Prepare to discuss RPC/service-to-service communication experience; do not claim gRPC unless used.",
+        "canSafelyAdd": false
+      },
+      {
+        "name": "On-call / SLO ownership",
+        "importance": "medium",
+        "jdEvidence": "Own service reliability, including on-call, SLOs, and incident response.",
+        "resumeEvidence": "Reliability work implied via latency/caching, but on-call and SLOs not stated.",
+        "suggestedAction": "If you participated in on-call, add it explicitly. This can be safely surfaced if true.",
+        "canSafelyAdd": true
+      }
+    ]
+  },
+  "warnings": [
+    "2 bullets use inferred reliability/SLO framing — verify before export.",
+    "Required skills Go, Kubernetes, and gRPC remain unaddressed and were not fabricated."
+  ]
+}

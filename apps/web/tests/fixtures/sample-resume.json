@@ -1,0 +1,71 @@
+{
+  "contact": {
+    "name": "Jordan Lee",
+    "email": "jordan.lee@example.com",
+    "phone": "+1 (555) 018-2299",
+    "location": "Austin, TX",
+    "links": ["github.com/jordanlee", "linkedin.com/in/jordanlee"]
+  },
+  "summary": "Backend engineer with 6 years building and operating high-traffic web services. Comfortable across the stack with a focus on reliable APIs, data pipelines, and developer tooling.",
+  "skills": [
+    "Python",
+    "Node.js",
+    "TypeScript",
+    "PostgreSQL",
+    "Redis",
+    "Docker",
+    "AWS",
+    "REST APIs",
+    "CI/CD"
+  ],
+  "experience": [
+    {
+      "company": "Brightwave Systems",
+      "title": "Senior Software Engineer",
+      "startDate": "2021-03",
+      "endDate": "Present",
+      "bullets": [
+        "Built and maintained REST APIs in Python and Node.js serving 3M daily requests.",
+        "Reduced p95 latency on the checkout service by 40% by adding Redis caching.",
+        "Led migration of the monolith's billing module into a standalone service.",
+        "Mentored three junior engineers and ran weekly code review sessions."
+      ]
+    },
+    {
+      "company": "Datapeak Analytics",
+      "title": "Software Engineer",
+      "startDate": "2018-06",
+      "endDate": "2021-02",
+      "bullets": [
+        "Developed ETL pipelines in Python processing 500GB of event data per day.",
+        "Automated deployments with GitHub Actions, cutting release time from hours to minutes.",
+        "Built an internal dashboard in React used by the analytics team daily."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "OpenSchedule",
+      "description": "Open-source cron-as-a-service tool.",
+      "bullets": [
+        "Designed a job queue backed by PostgreSQL with at-least-once delivery."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Texas at Austin",
+      "degree": "B.S.",
+      "field": "Computer Science",
+      "startDate": "2014-08",
+      "endDate": "2018-05"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "AWS Certified Solutions Architect – Associate",
+      "issuer": "Amazon Web Services",
+      "date": "2022-09"
+    }
+  ]
+}
