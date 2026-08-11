@@ -1,0 +1,51 @@
+# ── Secrets — EC-P0-02: these rules must survive the three-repo merge ──
+.env
+.env.*
+!.env.example
+token.json
+credentials.json
+*.pem
+*.key
+
+# ── Runtime artifacts from the source projects ──
+outreach_log.csv
+do_not_contact.csv
+jobs.csv
+!**/fixtures/jobs.csv
+
+# ── Node ──
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+.pnpm-store/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ── Test / coverage ──
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# ── Local infra ──
+.docker-data/
+*.sqlite
+*.sqlite3
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
