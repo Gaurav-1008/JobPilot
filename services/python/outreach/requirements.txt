@@ -3,7 +3,9 @@ python-dotenv>=1.0,<2.0
 
 # Phase 8 stretch goals — optional. Install only the ones you use:
 #   USE_LLM=true (LLM email rewriting)
-# anthropic>=0.116
+# SUPERSEDED by services/python/requirements.txt (the resolved set for ④).
+# anthropic was replaced by openai — rewriting now uses Groq (architecture.md §12.2).
+# openai>=1.54
 #   PROVIDER=gmail (Gmail API draft/send)
 # google-api-python-client>=2.0
 # google-auth-httplib2>=0.2

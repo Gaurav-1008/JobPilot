@@ -1,11 +1,22 @@
 """Phase 8 stretch: an LLM-backed generator behind the template interface.
 
 ``llm_generate_email`` has the same ``(contact, config) -> EmailDraft``
-signature as the deterministic template generator. It rewrites only the body
-with Claude, validates the result against the same safety constraints the
-template enforces, and falls back to the template on any failure (missing
-dependency, missing key, API error, refusal, or a draft that fails validation).
-This keeps the pipeline runnable with no API key configured.
+signature as the deterministic template generator. It rewrites only the body,
+validates the result against the same safety constraints the template enforces,
+and falls back to the template on any failure (missing dependency, missing key,
+API error, refusal, or a draft that fails validation). This keeps the pipeline
+runnable with no API key configured.
+
+Provider: Groq, via its OpenAI-compatible endpoint and the ``openai`` client —
+the same provider and client style ① already uses for the tailoring chain. The
+platform is deliberately single-provider: one key, one rate limiter, one failure
+mode to reason about.
+
+Note for anyone tuning this: the validator below was written against Claude's
+output. A different model family fails differently (more verbose, different
+stock phrasings), so the validator is now doing more work than it used to. If
+you see the template fallback firing often, tune BANNED_PHRASES and the prompt
+before raising WORD_LIMIT.
 """
 
 from __future__ import annotations
@@ -65,8 +76,11 @@ def _build_user_prompt(contact: Contact) -> str:
 
 
 def _extract_text(response) -> str:
-    parts = [block.text for block in response.content if getattr(block, "type", None) == "text"]
-    return "".join(parts).strip()
+    """Pull the body text out of an OpenAI-compatible chat completion."""
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return ""
+    return (getattr(choices[0].message, "content", None) or "").strip()
 
 
 def _validation_error(body: str, contact: Contact) -> str | None:
@@ -86,31 +100,38 @@ def _validation_error(body: str, contact: Contact) -> str | None:
 
 
 def llm_generate_email(contact: Contact, config: AppConfig) -> EmailDraft:
-    """Generate the body with Claude; fall back to the template on any problem."""
+    """Generate the body with Groq; fall back to the template on any problem."""
     try:
-        import anthropic
+        from openai import OpenAI
     except ImportError:
-        print("LLM fallback: 'anthropic' is not installed; using the template.")
+        print("LLM fallback: 'openai' is not installed; using the template.")
+        return generate_email(contact, config)
+
+    if not config.groq_api_key:
+        print("LLM fallback: GROQ_API_KEY is not set; using the template.")
         return generate_email(contact, config)
 
     try:
-        client = (
-            anthropic.Anthropic(api_key=config.anthropic_api_key)
-            if config.anthropic_api_key
-            else anthropic.Anthropic()
+        client = OpenAI(
+            api_key=config.groq_api_key,
+            base_url=config.groq_base_url,
         )
-        response = client.messages.create(
+        response = client.chat.completions.create(
             model=config.llm_model,
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": _build_user_prompt(contact)}],
+            temperature=0.5,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": _build_user_prompt(contact)},
+            ],
         )
-    except Exception as exc:  # network, auth, or configuration failure
+    except Exception as exc:  # network, auth, rate limit, or configuration failure
         print(f"LLM fallback for {contact.recipient_email}: request failed ({exc}). Using template.")
         return generate_email(contact, config)
 
-    if getattr(response, "stop_reason", None) == "refusal":
-        print(f"LLM fallback for {contact.recipient_email}: model declined. Using template.")
+    # A truncated completion is not a usable email — treat it like a refusal.
+    if getattr(response.choices[0], "finish_reason", None) not in (None, "stop"):
+        print(f"LLM fallback for {contact.recipient_email}: incomplete response. Using template.")
         return generate_email(contact, config)
 
     body = _extract_text(response)

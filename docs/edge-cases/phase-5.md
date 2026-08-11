@@ -62,9 +62,9 @@ Read this file before P5.1, not before P5.5.
 
 | ID | | Case | Required behavior | Task |
 |----|---|------|-------------------|------|
-| EC-P5-28 | 🟠 | `ANTHROPIC_API_KEY` missing | Template fallback, no error. Explicit acceptance criterion; inherited behavior 🟢 | P5.2.8 |
-| EC-P5-29 | 🟠 | Anthropic returns 429 or times out | Template fallback, logged. Never surface a raw provider error on the review screen | P5.2.4 |
-| EC-P5-30 | 🟠 | LLM returns 151 words against a 150 limit | Validator rejects → template fallback 🟢. Confirm the word-count definition matches the original (hyphenates, URLs, and em-dashes all count differently) | P5.2.4 |
+| EC-P5-28 | 🟠 | `GROQ_API_KEY` missing | Template fallback, no error. Explicit acceptance criterion; inherited behavior 🟢. Note this is now the *same* key the tailoring chain needs — if it is absent, scoring is already broken upstream | P5.2.8 |
+| EC-P5-29 | 🟠 | Groq returns 429 or times out | Template fallback, logged. Never surface a raw provider error on the review screen. **Single-provider consequence (§12.2):** the tailoring chain shares this quota, so a heavy batch-scoring run can rate-limit email generation. Budget the per-user LLM quota across both | P5.2.4 |
+| EC-P5-30 | 🔴 | LLM returns 151 words against a 150 limit | Validator rejects → template fallback 🟢. Confirm the word-count definition matches the original (hyphenates, URLs, and em-dashes all count differently). **Raised to 🔴 by the Groq switch:** the validator was tuned against Claude output. A different model family is verbose in different ways, so expect this to fire more often — tune the prompt and `BANNED_PHRASES` first, never `WORD_LIMIT` | P5.2.4 |
 | EC-P5-31 | 🟠 | LLM returns the body with a subject line embedded, or with markdown fences | Strip and validate. If the shape is wrong after one retry, fall back to the template | P5.2.4 |
 | EC-P5-32 | 🟠 | LLM returns an empty body | Treat as a validation failure → template | P5.2.4 |
 | EC-P5-33 | 🔴 | **Grounding BLOCKs on a named person — but the greeting is "Hi Priya," and Priya is the recipient** | Exclude `contact.recipientName` and the sender's own name from the named-person check. **Design gap**: as specified in `architecture.md` §13.3 this blocks every personalized greeting | P5.3.1 |

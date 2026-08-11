@@ -46,7 +46,7 @@ Each one solves one third of the job-search problem well. None of them talk to e
 
 ### 2.3 The Closer (Python CLI + Streamlit)
 
-- **Stack:** Python 3.10+, `smtplib`, Gmail API (OAuth2), Anthropic Claude API (optional rewriting), Streamlit UI.
+- **Stack:** Python 3.10+, `smtplib`, Gmail API (OAuth2), an LLM for optional rewriting (Anthropic Claude as built; **reprovisioned to Groq in the platform** — see architecture.md §12.2), Streamlit UI.
 - **Architecture:** `load → generate → preview → confirm → deliver → log`. Modules: `input_loader.py`, `email_generator.py` (deterministic six-part template), `llm_generator.py` (Claude rewrite + validator), `preview.py`, `email_sender.py` (SMTP), `gmail_sender.py` (OAuth), `recipient_filter.py` (opt-out + dedup), `logger.py`, `smtp_check.py`.
 - **Domain model** (`models.py`): `Contact`, `EmailDraft`, `LogEntry`.
 - **Inputs:** `contacts.json` or `jobs.csv` — each record needs `recipient_email`, `company`, `role`, `candidate_name`, `candidate_background`, plus optional `recipient_name`, `job_url`, `portfolio_url`, `personalization_note`, `linkedin_url`, `resume_link`.
@@ -467,7 +467,7 @@ Harvesting and hydration take tens of seconds to minutes. Both must run as queue
 
 ### 10.3 Secrets and per-user credentials
 
-The single-user `.env` model does not survive multi-user. Per-user Gmail OAuth tokens must be encrypted at rest and scoped to the user. `GROQ_API_KEY`, `FIRECRAWL_API_KEY`, and `ANTHROPIC_API_KEY` remain platform-level server-side secrets and are never exposed to the browser.
+The single-user `.env` model does not survive multi-user. Per-user Gmail OAuth tokens must be encrypted at rest and scoped to the user. `GROQ_API_KEY` and `FIRECRAWL_API_KEY` remain platform-level server-side secrets and are never exposed to the browser. (Groq is the single LLM provider — see architecture.md §12.2.)
 
 ---
 
@@ -484,7 +484,7 @@ The single-user `.env` model does not survive multi-user. Per-user Gmail OAuth t
 | ORM | Prisma or Drizzle | TS side owns migrations |
 | Queue | Redis + BullMQ, or Postgres-backed queue | For harvest/hydrate jobs |
 | LLM — tailoring | Groq (`llama-3.3-70b-versatile`) | Unchanged; fast and cheap for batch scoring |
-| LLM — email rewrite | Claude (Anthropic) | Unchanged from The Closer |
+| LLM — email rewrite | Groq (`llama-3.3-70b-versatile`) | Reprovisioned from Claude. Single provider platform-wide: one key, one rate limiter, one outage mode (§12.2) |
 | PDF | Playwright + Chromium | Unchanged from Resume Shapeshifter |
 | Email | `smtplib` + Gmail API (OAuth2) | Unchanged from The Closer |
 | Auth | NextAuth / Clerk / Supabase Auth | New requirement |
@@ -607,8 +607,8 @@ TAILORING_MODEL=llama-3.3-70b-versatile  # was LLM_MODEL in Resume-Builder.
                                          # Renamed: The Closer used the same
                                          # name for its Claude model (EC-P0-04)
 SCORING_MODEL=llama-3.1-8b-instant       # cheap batch-scoring pass (FR4)
-ANTHROPIC_API_KEY=                     # optional email rewriting
-EMAIL_LLM_MODEL=claude-opus-4-8
+EMAIL_LLM_MODEL=llama-3.3-70b-versatile  # Groq; separate var so email tone can
+                                         # be tuned without a second provider
 
 # ── Scraping ────────────────────────────────────────
 FIRECRAWL_API_KEY=

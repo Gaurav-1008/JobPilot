@@ -32,7 +32,11 @@ pyyaml>=6.0,<7.0
 # ── Outreach: delivery (from cold-email-sender, Phase 8 stretch) ─────
 # These were commented out as optional in the source. In the platform they are
 # no longer optional: PROVIDER=gmail is the default send path (P5.5.3).
-anthropic>=0.40             # optional at runtime; absent => template fallback
+openai>=1.54,<2.0           # Groq via its OpenAI-compatible endpoint.
+                            # Single provider for the whole platform: tailoring
+                            # (①) and email rewriting (④) both use Groq.
+                            # Replaces anthropic, which The Closer used for
+                            # email rewriting. Absent => template fallback.
 google-api-python-client>=2.0
 google-auth-httplib2>=0.2
 google-auth-oauthlib>=1.0

@@ -33,7 +33,11 @@ class AppConfig:
     dedupe: bool
     use_llm: bool
     llm_model: str
-    anthropic_api_key: str
+    # Groq is the platform's single LLM provider, reached through its
+    # OpenAI-compatible endpoint. Replaces the Anthropic key this project
+    # originally used for email rewriting.
+    groq_api_key: str
+    groq_base_url: str
     gmail_credentials_path: str
     gmail_token_path: str
 
@@ -136,8 +140,10 @@ def load_config() -> AppConfig:
         # EC-P0-04: renamed from LLM_MODEL. Resume-Builder uses that same name
         # for its Groq tailoring model; in a merged deployment whichever service
         # read it last won, and the failure was a wrong-model call, not a crash.
-        llm_model=_read("EMAIL_LLM_MODEL", "claude-opus-4-8"),
-        anthropic_api_key=_read("ANTHROPIC_API_KEY"),
+        # The default is now a Groq model — the platform is single-provider.
+        llm_model=_read("EMAIL_LLM_MODEL", "llama-3.3-70b-versatile"),
+        groq_api_key=_read("GROQ_API_KEY"),
+        groq_base_url=_read("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
         gmail_credentials_path=_read("GMAIL_CREDENTIALS_PATH", "credentials.json"),
         gmail_token_path=_read("GMAIL_TOKEN_PATH", "token.json"),
     )

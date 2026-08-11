@@ -388,7 +388,7 @@ sequenceDiagram
     W->>P: POST /email/generate {contact, sender, payload, useLlm}
     P->>P: six-part template 🟢
     opt USE_LLM
-        P->>P: Claude rewrite → validator 🟢
+        P->>P: Groq rewrite → validator 🟢
         Note right of P: fails validation → template fallback
     end
     P-->>W: EmailDraft {subject_options[], body, word_count, source}
@@ -938,18 +938,39 @@ DNS re-resolution after redirect matters: an allowlisted host can 302 to `169.25
 | 4 | Match scoring (full) | 🟢 existing | main | 0.1 | `MatchScore` + evidence |
 | 5 | Bullet rewriting | 🟢 existing | main | 0.3 | `BulletChange[]` |
 | 6 | Gap analysis | 🟢 existing | main | 0.1 | `ResumeGap[]` |
-| 7 | Email rewrite | 🟢 existing (Claude) | email | 0.5 | body text |
+| 7 | Email rewrite | 🟡 reprovisioned to Groq | email | 0.5 | body text |
 
 Prompts live in versioned files; `prompt_version` is stamped on every `tailoring_run` (§7.3).
 
-### 12.2 Provider split
+### 12.2 Single provider — Groq
 
-Two providers, kept deliberately:
+**Groq serves every prompt in the table above.** One API key, one client, one rate limiter, one failure mode.
 
-- **Groq** for the resume pipeline — high volume, latency-sensitive, cheap, and already proven against these prompts.
-- **Anthropic** for email rewriting — lower volume, higher stakes per token, already integrated in The Closer with a working validator.
+| Tier | Env var | Default | Used by |
+|------|---------|---------|---------|
+| main | `TAILORING_MODEL` | `llama-3.3-70b-versatile` | prompts 1–2, 4–6 |
+| cheap | `SCORING_MODEL` | `llama-3.1-8b-instant` | prompt 3 (Tier-1 batch, §12.3) |
+| email | `EMAIL_LLM_MODEL` | `llama-3.3-70b-versatile` | prompt 7 |
 
-Both sit behind `lib/llm/client.ts` 🟢, which already abstracts an OpenAI-compatible endpoint. Adding the Anthropic path is one adapter, not a refactor.
+Three variables, one provider. `EMAIL_LLM_MODEL` stays separate so email rewriting can be tuned independently of tailoring without reintroducing a second vendor.
+
+Everything reaches Groq through its OpenAI-compatible endpoint: `lib/llm/client.ts` 🟢 in ①, and the `openai` Python client in ④'s `llm_generator.py` 🟡.
+
+**Why this changed.** An earlier draft of this section kept Anthropic for email rewriting, on the reasoning that outreach is lower-volume and higher-stakes per token. Consolidating on Groq costs that model-quality argument and buys:
+
+- One secret instead of two (§15.3), so one fewer credential to scope, rotate, and keep out of logs.
+- One rate limiter and one retry/backoff policy rather than two with different semantics.
+- One outage mode. Under the two-provider design, §18 had to reason about Anthropic being down *and* Groq being down as separate rows with different degradations.
+- No Anthropic adapter in ① at all — the pre-planned "one adapter, not a refactor" work disappears.
+
+**The cost, stated plainly.** The Closer's post-generation validator (≤150 words, no fabricated-relationship language) was tuned against Claude's output. A different model family fails differently — more verbose, different stock phrasings, different refusal behavior. **The validator is now doing more work than it was designed for.** Two consequences for P5.2.4:
+
+- Expect the template fallback to fire more often at first. That is the system being safe, not broken.
+- Tune `BANNED_PHRASES` and the system prompt against real Groq output before considering any change to `WORD_LIMIT`.
+
+The fallback contract is unchanged and is what makes this switch low-risk: any failure — missing key, missing dependency, API error, truncated completion, or a draft that fails validation — falls back to the deterministic six-part template 🟢. The pipeline never requires the LLM to work.
+
+### 12.3 Three-tier scoring (FR4)
 
 ### 12.3 Three-tier scoring (FR4)
 
@@ -1042,7 +1063,7 @@ L3 running before persistence is the load-bearing detail. A blocked rewrite is n
 
 ### 13.2 The Closer's validator, preserved
 
-🟢 `llm_generator.py`'s post-generation validator runs unchanged in ④: ≤150 words, no fabricated-relationship language ("as we discussed", "per our conversation", "your colleague suggested"), template fallback on any failure. A missing `ANTHROPIC_API_KEY` degrades to the deterministic template rather than erroring (P3/P5).
+🟡 `llm_generator.py`'s post-generation validator runs in ④ with its logic unchanged: ≤150 words, no fabricated-relationship language ("as we discussed", "per our conversation", "your colleague suggested"), template fallback on any failure. A missing `GROQ_API_KEY` degrades to the deterministic template rather than erroring (P3/P5). Only the provider beneath it changed (§12.2) — and because it did, this validator now carries more weight than the version tuned against Claude.
 
 ### 13.3 NEW — outreach grounding checks
 
@@ -1187,7 +1208,7 @@ Raw `prisma.*` calls in route handlers are banned by lint rule. Combined with `O
 
 | Secret | Scope | Storage |
 |--------|-------|---------|
-| `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, `FIRECRAWL_API_KEY` | platform | env/secret manager, server-only |
+| `GROQ_API_KEY`, `FIRECRAWL_API_KEY` | platform | env/secret manager, server-only. Single LLM provider (§12.2) — one key, not two |
 | `WORKER_SERVICE_TOKEN` | platform | env, both ① and ④ |
 | `ENCRYPTION_KEY` | platform | KMS preferred; versioned for rotation |
 | SMTP password / Gmail refresh token | **per user** | `sender_credentials`, AES-256-GCM |

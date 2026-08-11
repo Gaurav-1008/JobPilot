@@ -496,7 +496,7 @@ P5.1 contacts  →  P5.2 generation  →  P5.3 review UI
 | P5.2.5 | Prompt instruction: `honestGaps` is what *not* to claim competence in | 🔴 | ④ |
 | P5.2.6 | Null payload → plain six-part template + generic-hook warning | 🟢 | ④ |
 | P5.2.7 | `POST /api/outreach/generate`; write `OutreachAttempt` as `generated` | 🔴 | ① |
-| P5.2.8 | Missing `ANTHROPIC_API_KEY` → template fallback, never an error | 🟢 | ④ |
+| P5.2.8 | Missing `GROQ_API_KEY` → template fallback, never an error | 🟢 | ④ |
 
 ### P5.3 — Outreach guardrails + review UI
 
@@ -573,7 +573,7 @@ No tracker board. No follow-ups. No bulk anything — and there is no `send-all`
 - [ ] Second email to the same contact → blocked by dedup
 - [ ] With `DRY_RUN=true`, a full send attempt opens no sockets and still logs
 - [ ] With `DRY_RUN=false` + valid OAuth → real Gmail draft appears, `provider_message_id` stored
-- [ ] Removing `ANTHROPIC_API_KEY` → template path, everything still works
+- [ ] Removing `GROQ_API_KEY` → template path, everything still works
 - [ ] All eight P5.6 tests green
 
 ### Exit gate → Phase 6
