@@ -603,8 +603,10 @@ jobpilot/
 # ── LLM ─────────────────────────────────────────────
 GROQ_API_KEY=
 GROQ_BASE_URL=https://api.groq.com/openai/v1
-LLM_MODEL=llama-3.3-70b-versatile
-SCORING_MODEL=llama-3.1-8b-instant     # cheap batch-scoring pass (FR4)
+TAILORING_MODEL=llama-3.3-70b-versatile  # was LLM_MODEL in Resume-Builder.
+                                         # Renamed: The Closer used the same
+                                         # name for its Claude model (EC-P0-04)
+SCORING_MODEL=llama-3.1-8b-instant       # cheap batch-scoring pass (FR4)
 ANTHROPIC_API_KEY=                     # optional email rewriting
 EMAIL_LLM_MODEL=claude-opus-4-8
 

@@ -636,20 +636,41 @@ CREATE TABLE review_events (
 CREATE TABLE outreach_attempts (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-  contact_id     UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  -- EC-P6-24: nullable ONLY so The Closer's outreach_log.csv can be imported.
+  -- That CSV has no application and no contact; with NOT NULL here the legacy
+  -- import (P6.4.2) cannot insert a single row. Enforced instead by the CHECK
+  -- below: every non-legacy row must carry both.
+  application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
+  contact_id     UUID REFERENCES contacts(id) ON DELETE CASCADE,
+  origin         TEXT NOT NULL DEFAULT 'platform'
+                 CHECK (origin IN ('platform','legacy_import')),
   parent_id      UUID REFERENCES outreach_attempts(id),  -- 🟢 follow-up linkage
   subject        TEXT NOT NULL,
-  body_snapshot  TEXT NOT NULL,        -- NEW: what was actually sent
-  body_hash      TEXT NOT NULL,
-  word_count     INT NOT NULL,
+  body_snapshot  TEXT,                 -- NEW: what was actually sent.
+                                       -- NULL only for legacy rows: the CSV
+                                       -- never stored the body.
+  body_hash      TEXT,
+  word_count     INT NOT NULL DEFAULT 0,
   generation_source TEXT NOT NULL CHECK (generation_source IN ('template','llm')),
   status         TEXT NOT NULL CHECK (status IN
                  ('generated','drafted','sent','skipped','failed')),
   provider       TEXT NOT NULL CHECK (provider IN ('dry_run','smtp','gmail_api')),
   provider_message_id TEXT,
+  -- EC-P5-59: stamped before the provider call, so a lost response leaves
+  -- evidence that a draft/send may exist despite a 'failed' status.
+  provider_attempted_at TIMESTAMPTZ,
   error_message  TEXT,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- Legacy rows may omit the links and the body; platform rows never may.
+  CONSTRAINT platform_rows_are_complete CHECK (
+    origin = 'legacy_import' OR (
+      application_id IS NOT NULL AND
+      contact_id     IS NOT NULL AND
+      body_snapshot  IS NOT NULL AND
+      body_hash      IS NOT NULL
+    )
+  )
 );
 -- Volume cap (FR8) is answered by an index, not by application memory
 CREATE INDEX outreach_cap_window ON outreach_attempts (user_id, created_at)
@@ -688,7 +709,7 @@ CREATE TABLE sender_credentials (
 |--------|-----------|--------|-------|
 | `jobs.csv` | one-time importer script | `jobs` (source-tagged, `harvest_run_id` = synthetic import run) | columns map 1:1 |
 | `contacts.json` / `jobs.csv` contacts | CSV import UI (FR6) | `contacts` | `source='imported_csv'`; sender fields hoisted to `users` |
-| `outreach_log.csv` | one-time importer | `outreach_attempts` | `body_snapshot` backfills as `NULL`-equivalent placeholder — the CSV never stored it; flag these rows as `legacy_import` |
+| `outreach_log.csv` | one-time importer | `outreach_attempts` | `origin='legacy_import'`; `application_id`, `contact_id`, `body_snapshot`, and `body_hash` are all NULL — the CSV stored none of them. The `platform_rows_are_complete` CHECK permits this for legacy rows only (EC-P6-24) |
 | `do_not_contact.csv` | importer | `opt_out_entries` | |
 | `sessionStorage` runs | none | — | ephemeral by design; nothing to migrate |
 | `token.json` | re-auth via OAuth flow | `sender_credentials` | never migrate a token file; make the user re-consent |
@@ -1025,17 +1046,26 @@ L3 running before persistence is the load-bearing detail. A blocked rewrite is n
 
 ### 13.3 NEW — outreach grounding checks
 
-The evidence-seeded generator (FR7) creates a new fabrication surface: an email could claim a skill the resume does not support. So L3's contract extends to outreach, in ① after ④ returns a draft:
+The evidence-seeded generator (FR7) creates a new fabrication surface: an email could claim a skill the resume does not support. So L3's contract extends to outreach, in ① after ④ returns a draft.
 
-| Check | Action |
-|-------|--------|
-| Email references a skill absent from `PersonalizationPayload.topMatchedSkills` | FLAG — shown at review |
-| Email names a person, referral, or prior contact not in `Contact` | **BLOCK** |
-| Email claims a credential absent from `ResumeProfile` | **BLOCK** |
-| Word count > `EMAIL_WORD_LIMIT` | FLAG 🟢 (existing behavior) |
-| Generic hook despite an available tailoring run | FLAG — signals a payload bug |
+**Scoping rule — read this before implementing.** These checks police **claims the sender makes about themselves**. They do not police the email's other content. An email may name the company, its products, its recent launch, or the role — that is research, not fabrication. Applying the checks to all proper nouns blocks every usable email.
+
+| Check | Evaluated against | Action |
+|-------|-------------------|--------|
+| Email claims a skill the sender does not have | **the full `ResumeProfile.skills` + `tailoredExperience` bullets** — *not* `PersonalizationPayload.topMatchedSkills` | FLAG — shown at review |
+| Email claims a relationship, referral, or prior contact | `Contact` fields, **excluding `contact.recipientName` and the sender's own name** | **BLOCK** |
+| Email claims a credential, degree, or certification | `ResumeProfile.education` + `.certifications` | **BLOCK** |
+| Word count > `EMAIL_WORD_LIMIT` | — | FLAG 🟢 (existing behavior) |
+| Generic hook despite an available tailoring run | `PersonalizationPayload` | FLAG — signals a payload bug |
+
+Two corrections to an earlier draft of this table, both found in [`edge-cases/phase-5.md`](./edge-cases/phase-5.md) and both fatal to the check as originally written:
+
+- **EC-P5-33** — `topMatchedSkills` carries only the top 3 entries. Checking claims against it FLAGs skills the user genuinely has, on nearly every email. The payload is a *prompt input*, never the verification corpus. Verify against the resume.
+- **EC-P5-34** — the recipient's name appears in the greeting of every personalized email ("Hi Priya,"). A named-person BLOCK that does not exclude `contact.recipientName` and the sender's own name blocks the entire feature.
 
 Blocked outreach falls back to the deterministic template, exactly as the LLM validator already does. Same pattern, new domain.
+
+**On user edits (EC-P5-37).** Grounding runs on ④'s output. When the user edits the body at review, re-run the checks and **warn — do not block**. The user is the accountable author of their own email; the guardrail exists to stop the *model* fabricating on their behalf. What must not happen is skipping the re-check while the review screen still implies the content was verified.
 
 ---
 
@@ -1397,10 +1427,22 @@ Every one of these corresponds to a guarantee the original projects made. Regres
 
 ## 22. Open Questions
 
-Flagged rather than guessed. Each needs a decision before the phase that depends on it.
+### 22.1 Decided — defaults taken
 
-1. **Auth provider** — NextAuth vs Supabase Auth vs Clerk. Matters for Phase 1. Supabase Auth is the pragmatic pick if Postgres is already Supabase; the schema above is provider-agnostic apart from `users.id`.
-2. **Prisma vs Drizzle** — no strong architectural pull. Prisma for ergonomics, Drizzle for SQL transparency and lighter serverless cold starts. Either satisfies §7.
+Resolved before Phase 0 by taking the documented default in each case. Revisit only with a reason.
+
+| # | Question | **Decision** | Rationale |
+|---|----------|--------------|-----------|
+| 1 | Auth provider | **Supabase Auth** | Postgres is Supabase, so auth and data share one provider. The schema is provider-agnostic apart from `users.id`, so this is reversible |
+| 2 | ORM | **Prisma** | Ergonomics over SQL transparency at this scale. Partial indexes and CHECK constraints go in raw migration SQL regardless (EC-P0-22/23) |
+| — | Wire casing (EC-P0-17) | **snake_case on the wire** | Matches The Closer's existing `Contact` fields; Pydantic `alias_generator` handles the TS side. A boundary test fails on any camelCase key |
+| — | `LLM_MODEL` collision (EC-P0-04) | **`TAILORING_MODEL` + `EMAIL_LLM_MODEL`** | The bare name meant the Groq model in one project and the Claude model in the other. It must not survive the merge |
+| — | Python floor (EC-P0-06) | **3.10+** | The Closer already requires it. Harvester's tests run on 3.10 before its 🟢 marker is trusted |
+
+### 22.2 Still open
+
+Each needs a decision before the phase that depends on it.
+
 3. **`posted_at` normalization** — boards emit `"2 days ago"`, `"Today"`, and absolute dates. `posted_at_parsed` is best-effort; how aggressively to parse per board is a Phase 2 detail.
 4. **Tier-1 batching** — 5 jobs per request is a guess. Needs measurement against real token limits and Groq latency.
 5. **SSE vs polling** — SSE is specified with a polling fallback. If the deployment target complicates streaming, polling alone is acceptable; the durable `board_results` record makes it work either way.

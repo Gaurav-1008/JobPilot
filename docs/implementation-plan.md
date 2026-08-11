@@ -838,18 +838,31 @@ If the timeline compresses, cut in this order. Never cut upward past the line.
 
 ## Decisions Owed
 
-From [`architecture.md`](./architecture.md) §22. Each blocks a phase.
+From [`architecture.md`](./architecture.md) §22.
+
+### Settled — defaults taken, no longer blocking
+
+| # | Decision | **Settled as** | Task |
+|---|----------|----------------|------|
+| 1 | Auth provider | **Supabase Auth** | P1.1.1 |
+| 2 | ORM | **Prisma** | P0.3.1 |
+| — | Wire casing (EC-P0-17) | **snake_case** | P0.2.3 |
+| — | `LLM_MODEL` collision (EC-P0-04) | **`TAILORING_MODEL` + `EMAIL_LLM_MODEL`** | P0.4.3 |
+| — | Python floor (EC-P0-06) | **3.10+** | P0.1.3 |
+
+### Still owed — each blocks a phase
 
 | # | Decision | Decide by | Default if undecided |
 |---|----------|-----------|---------------------|
-| 1 | Auth provider | P1.1.1 | Supabase Auth if Postgres is Supabase |
-| 2 | Prisma vs Drizzle | P0.3.1 | Prisma |
 | 3 | `posted_at` normalization depth | P2.4.4 | Best-effort, per board, non-blocking |
 | 4 | Tier-1 batch size | P4.2.2 | Start at 5, measure, record |
 | 5 | SSE vs polling | P2.3.7 | Ship both; polling is the fallback |
 | 6 | Follow-up cadence N | P6.2.5 | 7 days |
 | 7 | PDF rendering location | P7.4.1 | Stay in ①; move to ④ only if serverless bites |
 | 8 | Multi-user scale target | P7 | Tens of users; per-board rate limits bind first |
+| — | robots.txt failure policy (EC-P2-49) | P2.4.2 | 404 → allowed; 5xx → disallowed; malformed → allowed + log |
+| — | Job↔harvest-run cardinality (EC-P2-19) | P2.2.6 | Add `last_seen_run_id` alongside the existing FK |
+| — | Cache TTL vs never-evict (EC-P3-02) | P3.2.2 | TTL gates refresh; entries are never evicted |
 
 ---
 
