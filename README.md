@@ -29,27 +29,52 @@ in code and tests (`// EC-P5-33`); `grep -r 'EC-P'` then shows real coverage.
 
 ## Status
 
-**Phase 0 — in progress.** No platform code yet; the three projects are imported
-and still run standalone. See the plan's Phase 0 checklist for what remains
-(shared schema package, Prisma migration, docker-compose).
+**Phase 0 complete.** The three projects are imported with history and still run
+standalone; the shared schema contract, database layer, and local stack are in
+place. Phase 1 (auth + persistence) is next.
+
+| Task | State |
+|---|---|
+| P0.1 monorepo + subtree imports | done — 13 commits, history intact |
+| P0.2 shared schemas + enforced codegen | done — 27 Pydantic classes, 3 guards verified |
+| P0.3 migration, repository, import ban | done — 14 tables, 19/19 constraint tests pass |
+| P0.4 local stack | done — compose + Dockerfile; ④ lands in P2.1.1 |
 
 ## Getting started
 
 ```bash
-# Python service ④ (harvester + outreach)
+# 1. Local infrastructure (Postgres, Redis, MinIO)
+docker compose up -d
+
+# 2. Web app ①
+npm install
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+npm run dev
+
+# 3. Python service ④
 python3 -m venv .venv
 .venv/bin/python -m pip install -r services/python/requirements.txt
 .venv/bin/playwright install chromium      # needed from Phase 2 on
-
-# Web app ①
-npm install
-npm run dev
 
 cp .env.example .env                       # never commit the result
 ```
 
 Requires Node 20+ and Python 3.10+ (EC-P0-06 — The Closer's floor; the harvester
 claimed 3.8 but was never tested above it).
+
+### Useful commands
+
+| Command | What it does |
+|---|---|
+| `npm run db:verify` | Runs the migration against WASM Postgres and asserts every constraint **rejects** what it should. No Docker needed |
+| `npm run schemas:gen` | Regenerates `models.py` from the Zod wire types |
+| `npm run schemas:check` | Fails on schema drift — what CI runs |
+| `docker compose --profile worker up -d` | Adds ④ (only once P2.1.1 creates `main.py`) |
+
+`db:verify` is worth knowing about: it executes the real migration without a
+database daemon, so schema changes are checked on any machine and in CI.
 
 ## Safety posture
 

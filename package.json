@@ -23,6 +23,10 @@
     "db:migrate": "npm run db:migrate --workspace=apps/web",
     "db:seed": "npm run db:seed --workspace=apps/web",
     "db:generate": "npm run db:generate --workspace=apps/web",
-    "schemas:check": "npm run check --workspace=packages/shared-schemas"
+    "schemas:check": "npm run check --workspace=packages/shared-schemas",
+    "db:verify": "node scripts/verify-migration.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4"
   }
 }

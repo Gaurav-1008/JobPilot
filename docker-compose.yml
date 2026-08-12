@@ -1,0 +1,114 @@
+# ============================================================================
+# JobPilot local stack (P0.4.1).
+#
+#   docker compose up -d              Postgres + Redis + MinIO   (available now)
+#   docker compose --profile worker up -d   ...plus ④            (needs P2.1.1)
+#
+# ④ sits behind a profile because services/python/main.py does not exist until
+# P2.1.1. Without the profile a plain `docker compose up` would fail on a
+# service nobody needs yet, which trains people to ignore compose errors.
+#
+# This file is what makes the P0.3.2 migration verifiable end to end — until it
+# runs, that SQL has been parsed but never executed.
+# ============================================================================
+
+name: jobpilot
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jobpilot
+      POSTGRES_PASSWORD: local_dev_only
+      POSTGRES_DB: jobpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Named user AND database: bare `pg_isready` reports ready while the
+      # bootstrap database is still initialising, so migrations race it.
+      test: ["CMD-SHELL", "pg_isready -U jobpilot -d jobpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Queue state is reconstructible: a harvest re-runs, and every write is
+    # idempotent (P2.2.5). Durability here would buy nothing.
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: jobpilot
+      MINIO_ROOT_PASSWORD: local_dev_only
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the bucket, then exits 0. Without this the first resume
+  # upload fails against a bucket that was never created.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 jobpilot local_dev_only &&
+      mc mb --ignore-existing local/jobpilot &&
+      echo 'bucket ready'
+      "
+
+  worker:
+    # ④ — see the profile note at the top of this file.
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: services/python/Dockerfile
+    restart: unless-stopped
+    environment:
+      # EC-P0-27 / EC-P7-23: local and CI force dry-run at the config layer,
+      # ignoring any DRY_RUN override. Set deliberately here so the local stack
+      # cannot email a real person even if a .env says otherwise.
+      JOBPILOT_ENV: local
+      DRY_RUN: "true"
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      EMAIL_LLM_MODEL: ${EMAIL_LLM_MODEL:-llama-3.3-70b-versatile}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+      WORKER_SERVICE_TOKEN: ${WORKER_SERVICE_TOKEN:-local_dev_only}
+    ports:
+      - "8000:8000"
+    # EC-P2-13: Playwright leaks contexts under concurrency. The cap is a real
+    # limit, not a suggestion — an unbounded container OOMs and the symptom
+    # looks like a board outage rather than a resource problem.
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+volumes:
+  postgres_data:
+  minio_data:

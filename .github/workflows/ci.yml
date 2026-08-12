@@ -91,6 +91,22 @@ jobs:
       - run: python -m pytest services/python -q
         continue-on-error: true   # no tests yet; becomes blocking in P2.1.6
 
+  migration:
+    # P0.3.2 verified by EXECUTION, not inspection. PGlite is Postgres compiled
+    # to WASM, so this runs without a daemon — the migration is checked on every
+    # machine and in CI, not only where docker-compose (P0.4.1) is available.
+    # Every assertion tries to VIOLATE a constraint: one that exists but does
+    # not reject is worth nothing.
+    name: Migration constraints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run db:verify
+
   web:
     name: Web app
     runs-on: ubuntu-latest
