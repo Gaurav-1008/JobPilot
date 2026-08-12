@@ -38,11 +38,16 @@ export default function ProfilePage() {
     setStatus(res.ok ? "Saved." : "Could not save.");
   }
 
-  if (!p) return <main className="p-8 text-sm text-neutral-500">Loading…</main>;
-
+  // The heading lives OUTSIDE the loading branch. An early return that hides it
+  // leaves the page with no landmark until data arrives — the other dashboard
+  // pages get this right, and inconsistent structure is worse than either.
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-2xl font-semibold">Profile</h1>
+      {!p ? (
+        <p className="mt-4 text-sm text-neutral-500">Loading…</p>
+      ) : (
+      <>
       <p className="mt-1 text-sm text-neutral-600">
         Signed in as {p.email}. These details go into every outreach email, so
         they live here once rather than on every contact.
@@ -95,6 +100,8 @@ export default function ProfilePage() {
           <dd>{p.maxOutreachPerDay} emails / 24h</dd>
         </dl>
       </section>
+      </>
+      )}
     </main>
   );
 }
