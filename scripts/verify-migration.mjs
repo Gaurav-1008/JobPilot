@@ -15,7 +15,12 @@ import { citext } from "@electric-sql/pglite/contrib/citext";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
 const db = await PGlite.create({ extensions: { citext, pgcrypto } });
-await db.exec(readFileSync("apps/web/prisma/migrations/00000000000000_init/migration.sql", "utf8"));
+// Apply every migration in order, exactly as `prisma migrate deploy` would.
+import { readdirSync } from "node:fs";
+const MIGRATIONS = "apps/web/prisma/migrations";
+for (const dir of readdirSync(MIGRATIONS).sort()) {
+  await db.exec(readFileSync(`${MIGRATIONS}/${dir}/migration.sql`, "utf8"));
+}
 
 let pass = 0, fail = 0;
 const ok = (m) => { console.log(`  ok    ${m}`); pass++; };

@@ -41,6 +41,7 @@ model User {
   maxOutreachPerDay   Int      @default(5) @map("max_outreach_per_day")
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
 
+  authCredential    AuthCredential?
   resumes           Resume[]
   harvestRuns       HarvestRun[]
   jobs              Job[]
@@ -324,4 +325,18 @@ model SenderCredential {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sender_credentials")
+}
+
+/// Auth credentials for the DEV provider (P1.1.2). Dropped wholesale when the
+/// auth provider is swapped — see lib/auth/session.ts and architecture.md §22.2.
+/// Separate from User so no `SELECT *` on users can leak a password hash.
+model AuthCredential {
+  userId       String   @id @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_credentials")
 }
