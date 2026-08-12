@@ -32,18 +32,30 @@ log = logging.getLogger("jobpilot.worker")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # EC-P2-11: fail fast and for the RIGHT reason. If Playwright's browser is
-    # missing, say so at startup rather than letting the first scrape hang.
-    try:
-        from playwright.sync_api import sync_playwright
+    """
+    EC-P2-11 — fail fast and for the RIGHT reason: a missing browser should be
+    obvious at startup, not a hung scrape under load.
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            browser.close()
-        log.info("chromium ok")
+    Uses the ASYNC Playwright API deliberately. The sync API raises "It looks
+    like you are using Playwright Sync API inside the asyncio loop" when called
+    from an async lifespan, which the except below caught and reported as
+    "chromium unavailable". That made this a permanent FALSE NEGATIVE: it warned
+    on every boot even with a perfectly good browser, so a genuinely missing one
+    was indistinguishable from the noise. A check that always fails is worse
+    than no check, because people stop reading it.
+    """
+    try:
+        from playwright.async_api import async_playwright
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            version = browser.version
+            await browser.close()
+        log.info("chromium ok (%s)", version)
     except Exception as exc:  # noqa: BLE001 - startup diagnostics
         log.warning("chromium unavailable: %s", exc)
-        log.warning("scraping will fall back to requests-only paths")
+        log.warning("Naukri needs it; RemoteOK and Wellfound do not")
+        log.warning("fix: .venv/bin/playwright install chromium")
     yield
 
 

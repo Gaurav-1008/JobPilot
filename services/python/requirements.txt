@@ -26,7 +26,15 @@ requests>=2.32,<3.0
 beautifulsoup4>=4.12,<5.0
 lxml>=5.3,<6.0
 playwright>=1.48,<2.0       # pinned: see EC-P0-05 note above
-firecrawl-py>=1.5,<2.0
+firecrawl-py>=2.0,<4.0     # NOT <2.0 — see below.
+                            # boards/wellfound.py calls firecrawl.Firecrawl(),
+                            # which is the v2 API. v1 only exports FirecrawlApp,
+                            # so pinning <2.0 makes the adapter fail with
+                            # "module 'firecrawl' has no attribute 'Firecrawl'".
+                            # The source repo left this unpinned, so pip picked
+                            # v2 and it worked; the EC-P0-05 pinning pass broke
+                            # it by choosing a range without checking what the
+                            # code actually calls.
 pyyaml>=6.0,<7.0
 
 # ── Outreach: delivery (from cold-email-sender, Phase 8 stretch) ─────

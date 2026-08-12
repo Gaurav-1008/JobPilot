@@ -22,7 +22,13 @@ const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", 
   maxRetriesPerRequest: null,   // required by BullMQ
 });
 
-const prisma = new PrismaClient();
+// DIRECT_URL, not the pooled DATABASE_URL. Supavisor's transaction mode is
+// built for many short-lived serverless connections and drops idle ones; this
+// is a PERSISTENT worker, which is the opposite shape. Using the pooled URL is
+// what produced the P1017 "Server has closed the connection" crash below.
+const prisma = new PrismaClient({
+  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
+});
 const queue = new Queue(QUEUE_NAME, { connection });
 
 const deps: Deps = {
@@ -92,21 +98,59 @@ worker.on("completed", (job) => {
 console.log(JSON.stringify({ event: "orchestrator.ready", queue: QUEUE_NAME }));
 
 /**
- * EC-P2-30 — a run whose job vanished (Redis restart, crash) would otherwise
- * sit in `running` forever and spin the UI. Anything running past the window is
- * marked failed with a reason.
+ * EC-P2-30 — a run whose job vanished would otherwise sit in `running` forever
+ * and spin the UI. Anything past the window is marked failed.
+ *
+ * The try/catch is NOT decoration. The first version of this had none, and an
+ * `async` callback inside setInterval turns any rejection into an UNHANDLED
+ * rejection, which Node exits on by default. Supabase closed an idle pooled
+ * connection, Prisma threw P1017, and the reaper killed the entire orchestrator
+ * — the safety mechanism became the failure mode. Runs then sat `queued`
+ * forever, because the process that would have reaped them was the one that
+ * died.
+ *
+ * Known limitation, worth stating plainly: this reaper lives INSIDE ③. If ③
+ * is down, nothing reaps. A run stuck because the orchestrator died is exactly
+ * the case it cannot cover. Moving it to a cron or a DB-side job would fix
+ * that; until then, ③ needs a supervisor that restarts it.
  */
 const REAP_AFTER_MIN = 10;
-setInterval(async () => {
-  const cutoff = new Date(Date.now() - REAP_AFTER_MIN * 60_000);
-  const stale = await prisma.harvestRun.updateMany({
-    where: { status: "running", startedAt: { lt: cutoff } },
-    data: { status: "failed", finishedAt: new Date() },
-  });
-  if (stale.count > 0) {
-    console.log(JSON.stringify({ event: "stale.reaped", count: stale.count }));
-  }
+setInterval(() => {
+  void (async () => {
+    try {
+      const cutoff = new Date(Date.now() - REAP_AFTER_MIN * 60_000);
+      const stale = await prisma.harvestRun.updateMany({
+        where: { status: "running", startedAt: { lt: cutoff } },
+        data: { status: "failed", finishedAt: new Date() },
+      });
+      if (stale.count > 0) {
+        console.log(JSON.stringify({ event: "stale.reaped", count: stale.count }));
+      }
+    } catch (err) {
+      // A database blip must not take the worker down with it.
+      console.error(JSON.stringify({
+        event: "reaper.failed",
+        error: err instanceof Error ? err.message : String(err),
+      }));
+    }
+  })();
 }, 60_000);
+
+/**
+ * Last line of defence. A single failed async operation anywhere must not kill
+ * a worker that other jobs depend on. BullMQ already isolates job failures;
+ * these cover everything outside a job handler.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error(JSON.stringify({
+    event: "unhandledRejection",
+    error: reason instanceof Error ? reason.message : String(reason),
+  }));
+});
+
+process.on("uncaughtException", (err) => {
+  console.error(JSON.stringify({ event: "uncaughtException", error: err.message }));
+});
 
 for (const sig of ["SIGTERM", "SIGINT"] as const) {
   process.on(sig, async () => {

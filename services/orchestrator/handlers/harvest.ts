@@ -50,7 +50,8 @@ async function setBoardResult(
   const run = await deps.prisma.harvestRun.findUnique({
     where: { id: runId }, select: { boardResults: true },
   });
-  const merged = { ...(run?.boardResults as object ?? {}), [board]: result };
+  if (!run) return;   // EC-P2-37: the run was cancelled or cascade-deleted
+  const merged = { ...(run.boardResults as object ?? {}), [board]: result };
   await deps.prisma.harvestRun.update({
     where: { id: runId }, data: { boardResults: merged },
   });
@@ -61,10 +62,15 @@ async function setBoardResult(
 
 /** Fan out one child per board, then mark the run running. */
 export async function handleHarvestRun(deps: Deps, data: HarvestRunJob): Promise<void> {
-  await deps.prisma.harvestRun.update({
+  // EC-P2-37 — the run may be gone: the user cancelled, or their account was
+  // deleted and the cascade took it. A queued job for a vanished run is a
+  // NO-OP, not a failure. Treating it as a failure fills the dead-letter queue
+  // with noise and buries the retries that actually matter.
+  const updated = await deps.prisma.harvestRun.updateMany({
     where: { id: data.runId },
     data: { status: "running", startedAt: new Date() },
   });
+  if (updated.count === 0) return;
 
   for (const board of data.boards) {
     await deps.queue.add(
