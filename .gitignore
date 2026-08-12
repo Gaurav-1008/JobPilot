@@ -49,3 +49,6 @@ test-results/
 Thumbs.db
 .idea/
 *.swp
+
+# Python venv (P0.4)
+.venv/

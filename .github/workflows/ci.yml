@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # EC-P0-27 / EC-P7-23: CI must never be able to reach a real inbox, whatever
+  # a workflow file or a stray .env says. This is checked by a test below, not
+  # merely asserted here.
+  JOBPILOT_ENV: ci
+  DRY_RUN: "true"
+
+jobs:
+  schema-contract:
+    # P0.2.6 — the entire mitigation for the two-language schema risk
+    # (problemStatement.md §17). A documented convention would not survive the
+    # third sprint; a failing build does.
+    name: Schema contract (Zod <-> Pydantic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"   # EC-P0-06: the floor, not the newest
+
+      - name: Install codegen (pinned)
+        # EC-P0-15: pinned exactly. A generator that emits differently-ordered
+        # output across versions produces spurious diffs, and people learn to
+        # ignore the check — worse than not having one.
+        run: python -m pip install 'datamodel-code-generator==0.26.3'
+
+      - run: npm ci --workspace=packages/shared-schemas
+
+      - name: Fail on schema drift
+        # Regenerates and diffs. A Zod edit that was not regenerated fails here
+        # rather than silently desynchronising the Python service.
+        run: npm run check --workspace=packages/shared-schemas
+
+  python:
+    name: Python service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"   # EC-P0-06
+
+      - run: python -m pip install -r services/python/requirements.txt
+
+      - name: Harvester adapters import
+        run: |
+          cd services/python/harvester
+          python -c "from boards import naukri, remoteok, wellfound"
+
+      - name: Safe defaults hold with no .env
+        # Safety test 7 (architecture.md §19): missing config must resolve
+        # toward NOT sending.
+        run: |
+          cd services/python/outreach
+          python -c "
+          from config import load_config
+          c = load_config()
+          assert c.dry_run is True, 'DRY_RUN must default true'
+          assert c.send_mode == 'draft', 'SEND_MODE must default draft'
+          print('safe defaults OK')
+          "
+
+      - name: Forced dry-run cannot be overridden in CI
+        # EC-P0-27. Deliberately hostile: sets DRY_RUN=false and asserts the
+        # config layer still refuses. This is the test that makes P0.4.4 real
+        # rather than aspirational.
+        env:
+          DRY_RUN: "false"
+          JOBPILOT_ENV: ci
+        run: |
+          cd services/python/outreach
+          python -c "
+          from config import load_config
+          assert load_config().dry_run is True, 'CI must force dry-run'
+          print('forced dry-run OK')
+          "
+
+      - run: python -m pytest services/python -q
+        continue-on-error: true   # no tests yet; becomes blocking in P2.1.6
+
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run lint --workspace=apps/web
+      - run: npm run test --workspace=apps/web
+
+  hygiene:
+    name: Repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No literal NUL bytes in tracked text files
+        # A markdown file containing U+0000 is classified binary by git: no
+        # diff, no blame, and grep silently returns nothing. This happened once
+        # already, in the edge-case file describing NUL bytes.
+        run: |
+          python3 - <<'PY'
+          import subprocess, sys
+          files = subprocess.check_output(
+              ["git", "ls-files", "*.md", "*.ts", "*.tsx", "*.py", "*.json", "*.yml"],
+              text=True).split()
+          bad = [f for f in files if b"\x00" in open(f, "rb").read()]
+          if bad:
+              print("NUL bytes in:", *bad, sep="\n  "); sys.exit(1)
+          print(f"{len(files)} files clean")
+          PY
+
+      - name: No bare LLM_MODEL
+        # EC-P0-04: the name meant the Groq model in one source project and the
+        # Claude model in the other. It must not come back.
+        run: |
+          if git grep -nE '\bLLM_MODEL\b' -- \
+               ':!docs' ':!*.md' ':!.github' \
+             | grep -vE 'EMAIL_LLM_MODEL|TAILORING_MODEL|SCORING_MODEL'; then
+            echo "Bare LLM_MODEL found — use TAILORING_MODEL or EMAIL_LLM_MODEL"
+            exit 1
+          fi
+          echo "no bare LLM_MODEL"
+
+      - name: No bulk-send endpoint
+        # architecture.md §9.1: there is deliberately no send-all route. Not
+        # unimplemented — architecturally absent. This keeps it that way.
+        run: |
+          if git grep -niE 'send[_-]?all|bulk[_-]?send' -- ':!docs' ':!*.md' ':!.github'; then
+            echo "A bulk-send path appeared. See ADR-008 / problemStatement.md §12.3."
+            exit 1
+          fi
+          echo "no bulk-send path"

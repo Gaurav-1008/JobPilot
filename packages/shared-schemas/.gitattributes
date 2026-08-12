@@ -1,0 +1,4 @@
+# EC-P0-16: collapse the generated file in review, but keep it DIFFABLE so the
+# CI drift check (P0.2.6) still works. Do not add it to .gitignore — it is
+# committed on purpose so a Python-only checkout has the models.
+generated/models.py linguist-generated=true
