@@ -48,8 +48,16 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // The repository itself is the one place allowed to hold the client.
-    files: ["lib/db/**/*.ts"],
+    /**
+     * The only two places allowed to hold the raw client.
+     *
+     * lib/db/**   the repository itself — it IS the tenant-scoping layer.
+     * prisma/**   seeds and migration scripts. These run outside any user
+     *             session; the seed creates the user, so there is no userId to
+     *             scope by yet. Narrow on purpose: adding a path here is a
+     *             decision about tenant isolation, not a convenience.
+     */
+    files: ["lib/db/**/*.ts", "prisma/**/*.ts"],
     rules: { "no-restricted-imports": "off" },
   },
   // Override default ignores of eslint-config-next.
