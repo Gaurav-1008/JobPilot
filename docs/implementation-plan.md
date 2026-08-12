@@ -1,7 +1,7 @@
 # JobPilot — Phase-Wise Implementation Plan
 
 **References:** [`problemStatement.md`](./problemStatement.md) (what and why) · [`architecture.md`](./architecture.md) (how)
-**Status:** Not started. Phase 0 is the next action.
+**Status:** Phases 0 and 1 complete. Phase 2 (harvest in the browser) is next.
 **Assumed team:** one developer. Estimates are focused working days, not calendar days.
 
 ---

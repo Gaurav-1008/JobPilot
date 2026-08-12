@@ -29,16 +29,28 @@ in code and tests (`// EC-P5-33`); `grep -r 'EC-P'` then shows real coverage.
 
 ## Status
 
-**Phase 0 complete.** The three projects are imported with history and still run
-standalone; the shared schema contract, database layer, and local stack are in
-place. Phase 1 (auth + persistence) is next.
+**Phases 0 and 1 complete.** Phase 2 (harvest in the browser) is next.
+
+| Phase | State |
+|---|---|
+| **0** Monorepo and contract | done — 3 projects imported with history, enforced Zod↔Pydantic codegen, 14-table schema |
+| **1** Persistence and auth | done — Supabase Auth, resume library, tailoring runs persist server-side |
+
+Phase 1 closed **Breakage 3 (part)**: a tailoring run now survives the browser.
+Both lost-state stores are gone — the in-memory server map and the
+`sessionStorage` client store.
 
 | Task | State |
 |---|---|
-| P0.1 monorepo + subtree imports | done — 13 commits, history intact |
-| P0.2 shared schemas + enforced codegen | done — 27 Pydantic classes, 3 guards verified |
-| P0.3 migration, repository, import ban | done — 14 tables, 19/19 constraint tests pass |
-| P0.4 local stack | done — compose + Dockerfile; ④ lands in P2.1.1 |
+| P1.1 Supabase Auth + default-deny middleware | done — schema live on the hosted project |
+| P1.2 Resume library: upload, parse, versions, default | done |
+| P1.3 Tailoring persisted server-side; both stores deleted | done |
+| P1.4 Guardrails enforced before persistence | done |
+| P1.5 Safety tests 8 and 10 | done — both verified by deliberate break |
+
+**Not yet walked in a browser.** The pages build and the routes exist, but the
+live sign-up → upload → tailor path needs a real inbox (EC-P1-43) and has not
+been exercised end to end.
 
 ## Getting started
 
