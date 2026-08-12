@@ -34,3 +34,47 @@ export async function ensureUser(userId: string, email: string): Promise<void> {
     },
   });
 }
+
+/** Profile + the read-only outreach settings shown in P1.1.5. */
+export async function getProfile(userId: string) {
+  return prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: {
+      email: true,
+      candidateName: true,
+      candidateBackground: true,
+      portfolioUrl: true,
+      linkedinUrl: true,
+      // Read-only until P5.5.10. Shown so the safety posture is visible from
+      // day one rather than appearing later as a surprise.
+      dryRun: true,
+      sendMode: true,
+      maxOutreachPerDay: true,
+    },
+  });
+}
+
+export interface ProfilePatch {
+  candidateName?: string | null;
+  candidateBackground?: string | null;
+  portfolioUrl?: string | null;
+  linkedinUrl?: string | null;
+}
+
+/**
+ * Sender identity only. The outreach safety columns are intentionally absent
+ * from this type — see the note on PATCH /api/profile (EC-P1-07).
+ */
+export async function updateProfile(userId: string, patch: ProfilePatch) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: patch,
+    select: {
+      email: true,
+      candidateName: true,
+      candidateBackground: true,
+      portfolioUrl: true,
+      linkedinUrl: true,
+    },
+  });
+}
