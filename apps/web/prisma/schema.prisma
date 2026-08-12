@@ -41,7 +41,6 @@ model User {
   maxOutreachPerDay   Int      @default(5) @map("max_outreach_per_day")
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  authCredential    AuthCredential?
   resumes           Resume[]
   harvestRuns       HarvestRun[]
   jobs              Job[]
@@ -183,8 +182,10 @@ model Application {
 model TailoringRun {
   id              String   @id @default(uuid()) @db.Uuid
   userId          String   @map("user_id") @db.Uuid
-  applicationId   String   @map("application_id") @db.Uuid
-  resumeId        String   @map("resume_id") @db.Uuid
+  // Nullable: a Phase 1 paste-driven run has no Application or stored Resume.
+  // See migrations/00000000000001_standalone_runs. Phase 4 runs set both.
+  applicationId   String?  @map("application_id") @db.Uuid
+  resumeId        String?  @map("resume_id") @db.Uuid
   tier            String
   matchScore      Json     @map("match_score")
   tailoredResume  Json?    @map("tailored_resume")
@@ -198,8 +199,8 @@ model TailoringRun {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application        Application         @relation("TailoringRunApplication", fields: [applicationId], references: [id], onDelete: Cascade)
-  resume             Resume              @relation("TailoringRunResume", fields: [resumeId], references: [id], onDelete: Restrict)
+  application        Application?        @relation("TailoringRunApplication", fields: [applicationId], references: [id], onDelete: Cascade)
+  resume             Resume?             @relation("TailoringRunResume", fields: [resumeId], references: [id], onDelete: Restrict)
   exportedDocuments  ExportedDocument[]
   activeForApps      Application[]       @relation("ApplicationActiveRun")
   derivedResumes     Resume[]            @relation("ResumeDerivedFrom")
@@ -325,18 +326,4 @@ model SenderCredential {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sender_credentials")
-}
-
-/// Auth credentials for the DEV provider (P1.1.2). Dropped wholesale when the
-/// auth provider is swapped — see lib/auth/session.ts and architecture.md §22.2.
-/// Separate from User so no `SELECT *` on users can leak a password hash.
-model AuthCredential {
-  userId       String   @id @map("user_id") @db.Uuid
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("auth_credentials")
 }

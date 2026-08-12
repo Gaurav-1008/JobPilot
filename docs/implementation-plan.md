@@ -844,7 +844,7 @@ From [`architecture.md`](./architecture.md) §22.
 
 | # | Decision | **Settled as** | Task |
 |---|----------|----------------|------|
-| 1 | Auth provider | **Supabase Auth** | P1.1.1 |
+| 1 | Auth provider | **Supabase Auth (GoTrue, self-hosted locally)** | P1.1.1 ✅ |
 | 2 | ORM | **Prisma** | P0.3.1 |
 | — | Wire casing (EC-P0-17) | **snake_case** | P0.2.3 |
 | — | `LLM_MODEL` collision (EC-P0-04) | **`TAILORING_MODEL` + `EMAIL_LLM_MODEL`** | P0.4.3 |

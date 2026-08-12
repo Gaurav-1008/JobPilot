@@ -49,6 +49,44 @@ services:
       timeout: 3s
       retries: 10
 
+  # Supabase Auth. GoTrue IS Supabase Auth — running it here against our own
+  # Postgres honours architecture.md §22.1 without a hosted project. Moving to
+  # hosted Supabase later means pointing NEXT_PUBLIC_SUPABASE_URL at the project
+  # and deleting this service; no application code changes.
+  auth:
+    image: supabase/gotrue:v2.177.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: http://localhost:9999
+      GOTRUE_DB_DRIVER: postgres
+      # GoTrue creates and owns the `auth` schema in this database. Our
+      # `public` tables are untouched by it.
+      GOTRUE_DB_DATABASE_URL: postgres://jobpilot:local_dev_only@postgres:5432/jobpilot?search_path=auth&sslmode=disable
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: http://localhost:3000/**
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_SECRET: local_dev_only_jwt_secret_at_least_32_chars
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      # Local only: no mail server, so requiring confirmation would make every
+      # signup a dead end. Production MUST set this true.
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_LOG_LEVEL: warn
+    ports:
+      - "9999:9999"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
   minio:
     image: minio/minio:latest
     restart: unless-stopped

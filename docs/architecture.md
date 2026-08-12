@@ -1454,7 +1454,7 @@ Resolved before Phase 0 by taking the documented default in each case. Revisit o
 
 | # | Question | **Decision** | Rationale |
 |---|----------|--------------|-----------|
-| 1 | Auth provider | **Supabase Auth** | Postgres is Supabase, so auth and data share one provider. The schema is provider-agnostic apart from `users.id`, so this is reversible |
+| 1 | Auth provider | **Supabase Auth (GoTrue)** | Implemented in P1.1.2. The original rationale ("if Postgres is already Supabase") looked invalidated when P0.4.1 stood up plain Postgres — but Supabase Auth *is* GoTrue, which runs against any Postgres. `docker compose up -d auth` runs it against ours, so the decision holds with no hosted project. Hosted Supabase later is a URL swap, not a rewrite |
 | 2 | ORM | **Prisma** | Ergonomics over SQL transparency at this scale. Partial indexes and CHECK constraints go in raw migration SQL regardless (EC-P0-22/23) |
 | — | Wire casing (EC-P0-17) | **snake_case on the wire** | Matches The Closer's existing `Contact` fields; Pydantic `alias_generator` handles the TS side. A boundary test fails on any camelCase key |
 | — | `LLM_MODEL` collision (EC-P0-04) | **`TAILORING_MODEL` + `EMAIL_LLM_MODEL`** | The bare name meant the Groq model in one project and the Claude model in the other. It must not survive the merge |
