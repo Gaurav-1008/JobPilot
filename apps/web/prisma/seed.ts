@@ -14,13 +14,28 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const SEED_EMAIL = "demo@example.com";
+/**
+ * EC-P1-42 — Supabase Auth REJECTS @example.com (`email_address_invalid`), and
+ * EC-P0-26 requires exactly that domain so seed data can never mail a real
+ * person. Both rules are right; they simply cannot both be satisfied by one row.
+ *
+ * Resolution: this row is DATA-ONLY. It exercises queries and the UI, but has
+ * no auth identity and cannot sign in — by design.
+ *
+ * To seed data against an account you can actually sign in as, create it
+ * through the UI first, then re-run with its id:
+ *
+ *   SEED_USER_ID=<uuid from auth.users> SEED_USER_EMAIL=<you@real> npm run db:seed
+ */
+const SEED_EMAIL = process.env.SEED_USER_EMAIL ?? "demo@example.com";
+const SEED_ID = process.env.SEED_USER_ID;
 
 async function main() {
   const user = await prisma.user.upsert({
     where: { email: SEED_EMAIL },
     update: {},
     create: {
+      ...(SEED_ID ? { id: SEED_ID } : {}),
       email: SEED_EMAIL,
       candidateName: "Demo Candidate",
       candidateBackground:
@@ -148,6 +163,12 @@ async function main() {
     jobs: await prisma.job.count(),
   };
   console.log("seeded (idempotent):", counts);
+  if (!SEED_ID) {
+    console.log(
+      "  NOTE: this user has no auth identity and cannot sign in (EC-P1-42).\n" +
+      "  For a signed-in account: SEED_USER_ID=<uuid> SEED_USER_EMAIL=<email> npm run db:seed",
+    );
+  }
   console.log(`  user=${user.email} resume=v${resume.version} run=${run.id}`);
 }
 

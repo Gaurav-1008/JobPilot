@@ -5,7 +5,7 @@ One file per implementation phase. Open the matching file **before** you start a
 | Phase | File | Cases | Focus |
 |-------|------|-------|-------|
 | 0 | [phase-0.md](./phase-0.md) | 28 | Merge collisions, schema codegen, migrations |
-| 1 | [phase-1.md](./phase-1.md) | 41 | Uploads, versioning races, tenant isolation |
+| 1 | [phase-1.md](./phase-1.md) | 43 | Uploads, versioning races, tenant isolation |
 | 2 | [phase-2.md](./phase-2.md) | 52 | Board failures, dedupe, queue, SSE, rate limits |
 | 3 | [phase-3.md](./phase-3.md) | 47 | SSRF, cache keys, junk JDs, paste fallback |
 | 4 | [phase-4.md](./phase-4.md) | 33 | Batch mapping, stale scores, cost blowups |
@@ -13,7 +13,7 @@ One file per implementation phase. Open the matching file **before** you start a
 | 6 | [phase-6.md](./phase-6.md) | 35 | Status conflicts, sweep safety, legacy import |
 | 7 | [phase-7.md](./phase-7.md) | 30 | Deletion, rotation, redaction, degradation |
 
-**Total: 334 cases.**
+**Total: 336 cases.**
 
 ---
 
@@ -61,6 +61,7 @@ Eighteen cases contradict, or expose a hole in, [`problemStatement.md`](../probl
 | EC-P0-14 | Zod `.refine()` / `.superRefine()` vanish in JSON Schema — Pydantic silently loses the constraint | P0 | Ban refinements on wire types; enforce in ④ by hand and test both sides |
 | EC-P0-17 | Wire casing undecided — TS is camelCase, The Closer's models are snake_case | P0 | Pick snake_case on the wire; Pydantic `alias_generator`; assert in a contract test |
 | EC-P1-09 | PDF extraction can emit `\x00`; Postgres `text` rejects null bytes | P1 | Strip control chars in `document-extract` before persist |
+| EC-P1-42 | Supabase Auth rejects `@example.com`, the domain EC-P0-26 mandates for seeds — a seeded user can never sign in | P1 | Seed rows are data-only; pass `SEED_USER_ID` to attach real data to a real account |
 | EC-P2-19 | `jobs.harvest_run_id` is a single FK, but a job legitimately appears in many runs | P2 | Keep `first_seen_run_id`, add `last_seen_run_id`, or a join table |
 | EC-P3-02 | `HYDRATION_CACHE_TTL_DAYS=30` (§14) contradicts "fetched once, ever" (FR2) | P3 | TTL governs *refresh eligibility*; never evict. Decide and write it down |
 | EC-P3-05 | A `manual_paste` entering the cross-user `jd_cache` shares whatever the user typed | P3 | **Never cache manual pastes.** Cache only machine-fetched public pages |

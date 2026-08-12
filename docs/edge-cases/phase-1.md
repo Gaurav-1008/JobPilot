@@ -4,7 +4,7 @@
 
 Phase 1 turns a single-user, session-scoped tool into a multi-user, persistent one. Two categories dominate: **files users upload are hostile by default**, and **anything that was previously impossible to do twice is now a race**.
 
-**41 cases.** 🔴 must-handle · 🟠 should-handle · 🟡 polish
+**43 cases.** 🔴 must-handle · 🟠 should-handle · 🟡 polish
 
 ---
 
@@ -19,6 +19,8 @@ Phase 1 turns a single-user, session-scoped tool into a multi-user, persistent o
 | EC-P1-05 | 🟠 | Middleware protects `/(dashboard)/*` but a new route group is added later outside it | Default-deny: protect everything, allow-list the public routes. Never the reverse | P1.1.3 |
 | EC-P1-06 | 🟠 | `candidate_background` is empty and the user reaches P5 — email generation has nothing to say | Not a P1 error, but P1 must persist `NULL` cleanly and P5 must handle it. Do not default it to an empty string that reads as "provided" | P1.1.4 |
 | EC-P1-07 | 🟡 | Settings page shows `dry_run` read-only in P1; a user toggles it via devtools | Server ignores the field entirely until P5.5.10. Read-only in the UI must mean not-writable on the server | P1.1.5 |
+| EC-P1-42 | 🔴 | **Supabase Auth rejects `@example.com`** with `email_address_invalid`. EC-P0-26 mandates exactly that domain for seed data, so a seeded user can NEVER have a matching auth identity and can never sign in | The two rules are both right and directly conflict. Resolution: the seed's `public.users` row is **data-only** — useful for exercising queries, never for signing in. To seed data against a REAL account, pass `SEED_USER_ID`/`SEED_USER_EMAIL` from an account created through the UI. Do not "fix" this by seeding a deliverable domain: EC-P0-26 exists so seed data cannot email a real person | P0.3.5 |
+| EC-P1-43 | 🟠 | `mailer_autoconfirm: false` on a hosted project means every signup sends a **real confirmation email**, so dev signups need a real inbox and cannot be scripted against arbitrary addresses | Fine for production, awkward for development. Either enable autoconfirm on a dev project, use the local GoTrue profile (which sets `GOTRUE_MAILER_AUTOCONFIRM=true`), or sign up manually with a real address. **Never** script signups against invented domains — that mails whoever owns them | P1.1.2 |
 
 ---
 
