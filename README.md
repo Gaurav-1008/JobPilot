@@ -43,7 +43,13 @@ place. Phase 1 (auth + persistence) is next.
 ## Getting started
 
 ```bash
-# 1. Local infrastructure (Postgres, Redis, MinIO)
+# 0. Secrets — fill these in .env (never commit it)
+cp .env.example .env
+#    NEXT_PUBLIC_SUPABASE_ANON_KEY   Dashboard -> Settings -> API (public key)
+#    DATABASE_URL                    Settings -> Database -> pooled  (:6543)
+#    DIRECT_URL                      Settings -> Database -> direct  (:5432)
+
+# 1. Local infrastructure (Redis, MinIO — Postgres now lives in Supabase)
 docker compose up -d
 
 # 2. Web app ①
@@ -57,8 +63,6 @@ npm run dev
 python3 -m venv .venv
 .venv/bin/python -m pip install -r services/python/requirements.txt
 .venv/bin/playwright install chromium      # needed from Phase 2 on
-
-cp .env.example .env                       # never commit the result
 ```
 
 Requires Node 20+ and Python 3.10+ (EC-P0-06 — The Closer's floor; the harvester
@@ -72,6 +76,7 @@ claimed 3.8 but was never tested above it).
 | `npm run schemas:gen` | Regenerates `models.py` from the Zod wire types |
 | `npm run schemas:check` | Fails on schema drift — what CI runs |
 | `docker compose --profile worker up -d` | Adds ④ (only once P2.1.1 creates `main.py`) |
+| `docker compose --profile local-auth up -d auth` | Offline auth — GoTrue against local Postgres, if you'd rather not use the hosted project |
 
 `db:verify` is worth knowing about: it executes the real migration without a
 database daemon, so schema changes are checked on any machine and in CI.
@@ -104,5 +109,5 @@ services/python/
 docs/                      problem statement, architecture, plan, edge cases
 ```
 
-Planned but not yet created: `services/orchestrator/` (③, the single writer) and
-`packages/shared-schemas/` (the Zod↔Pydantic contract).
+`packages/shared-schemas/` holds the Zod↔Pydantic contract. Planned but not yet
+created: `services/orchestrator/` (③, the single writer).

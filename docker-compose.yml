@@ -54,6 +54,11 @@ services:
   # hosted Supabase later means pointing NEXT_PUBLIC_SUPABASE_URL at the project
   # and deleting this service; no application code changes.
   auth:
+    # OFFLINE ALTERNATIVE to the hosted Supabase project. Behind a profile so a
+    # plain `up` does not start an auth server nobody is pointing at.
+    #   docker compose --profile local-auth up -d auth
+    # ...then set NEXT_PUBLIC_SUPABASE_URL=http://localhost:9999
+    profiles: ["local-auth"]
     image: supabase/gotrue:v2.177.0
     restart: unless-stopped
     depends_on:

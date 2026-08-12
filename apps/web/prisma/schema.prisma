@@ -25,7 +25,13 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Pooled connection (Supavisor :6543) for runtime queries.
+  url       = env("DATABASE_URL")
+  // Direct connection (:5432) for migrations. pgbouncer in transaction mode
+  // cannot hold the advisory locks or run the DDL that `prisma migrate` needs,
+  // and fails with an error that does not say so. Prisma uses this URL only
+  // for migrate/introspect.
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
