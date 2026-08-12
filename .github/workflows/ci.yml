@@ -88,8 +88,11 @@ jobs:
           print('forced dry-run OK')
           "
 
-      - run: python -m pytest services/python -q
-        continue-on-error: true   # no tests yet; becomes blocking in P2.1.6
+      - name: Python tests (SSRF guard is blocking)
+        # No longer continue-on-error: services/python/tests now holds the SSRF
+        # suite (P3.1.4), and a regression there is a server-side request
+        # forgery, not a flaky test.
+        run: python -m pytest services/python/tests -q
 
   migration:
     # P0.3.2 verified by EXECUTION, not inspection. PGlite is Postgres compiled

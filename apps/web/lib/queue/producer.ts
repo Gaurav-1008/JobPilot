@@ -8,7 +8,7 @@
 import { Queue } from "bullmq";
 import Redis from "ioredis";
 
-import { QUEUE_NAME, runJobId, type HarvestRunJob } from "./types";
+import { QUEUE_NAME, runJobId, hydrateJobId, type HarvestRunJob, type HydrateJobPayload } from "./types";
 
 const g = globalThis as unknown as { __jobpilotQueue?: Queue; __jobpilotRedis?: Redis };
 
@@ -32,4 +32,21 @@ export async function enqueueHarvest(data: HarvestRunJob): Promise<void> {
     removeOnComplete: 50,
     removeOnFail: 50,
   });
+}
+
+/**
+ * P3.2.1 / FR2 — hydrate only the jobs the user selected, never a whole run.
+ * Hydrating everything scraped is wasteful and unkind to the source sites.
+ */
+export async function enqueueHydrate(jobs: HydrateJobPayload[]): Promise<void> {
+  const q = harvestQueue();
+  await Promise.all(jobs.map((j) =>
+    q.add("hydrate:job", j, {
+      jobId: hydrateJobId(j.jobId),   // deterministic: a retry is idempotent
+      attempts: 2,
+      backoff: { type: "exponential", delay: 5_000 },
+      removeOnComplete: 200,
+      removeOnFail: 200,
+    }),
+  ));
 }

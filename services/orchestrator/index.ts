@@ -17,6 +17,8 @@ import Redis from "ioredis";
 import { QUEUE_NAME } from "../../apps/web/lib/queue/types";
 import { BoardCircuitBreaker, BoardRateLimiter } from "./lib/board-circuit";
 import { handleHarvestBoard, handleHarvestRun, finaliseRun, type Deps } from "./handlers/harvest";
+import { handleHydrateJob, type HydrateDeps } from "./handlers/hydrate";
+import { parseJobDescription } from "../../apps/web/services/jd-parser";
 
 const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
   maxRetriesPerRequest: null,   // required by BullMQ
@@ -68,6 +70,39 @@ const deps: Deps = {
   },
 };
 
+const hydrateDeps: HydrateDeps = {
+  prisma,
+  redis: connection,
+  fetchJd: async (url) => {
+    const base = process.env.WORKER_SERVICE_URL ?? "http://localhost:8000";
+    const controller = new AbortController();
+    // Firecrawl + a Playwright fallback can legitimately take a while; the
+    // per-page timeouts inside ④ are the real bound.
+    const timer = setTimeout(() => controller.abort(), 180_000);
+    try {
+      const res = await fetch(`${base}/hydrate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-service-token": process.env.WORKER_SERVICE_TOKEN ?? "",
+        },
+        body: JSON.stringify({ url }),
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(`worker returned ${res.status}: ${text.slice(0, 120)}`);
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+  // P3.2.3 — the EXISTING extraction prompt, called unchanged.
+  extractProfile: (rawText) => parseJobDescription(rawText),
+};
+
 const worker = new Worker(
   QUEUE_NAME,
   async (job) => {
@@ -76,6 +111,7 @@ const worker = new Worker(
       await handleHarvestBoard(deps, job.data);
       return finaliseRun(deps, job.data.runId);
     }
+    if (job.name === "hydrate:job") return handleHydrateJob(hydrateDeps, job.data);
   },
   {
     connection,

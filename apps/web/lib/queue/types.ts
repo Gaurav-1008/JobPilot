@@ -26,7 +26,12 @@ export interface HarvestBoardJob {
   limit: number;
 }
 
-export type JobName = "harvest:run" | "harvest:board";
+export interface HydrateJobPayload {
+  jobId: string;
+  userId: string;
+}
+
+export type JobName = "harvest:run" | "harvest:board" | "hydrate:job";
 
 /**
  * `harvest-{runId}-{board}` — a redelivery maps onto the same id.
@@ -42,4 +47,9 @@ export function boardJobId(runId: string, board: string): string {
 
 export function runJobId(runId: string): string {
   return `harvest-${runId}`;
+}
+
+/** P3.2.1 — deterministic, so a redelivery cannot re-fetch the same page. */
+export function hydrateJobId(jobId: string): string {
+  return `hydrate-${jobId}`;
 }

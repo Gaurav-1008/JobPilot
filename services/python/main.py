@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from routers import boards
+from routers import boards, hydrate
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -96,3 +96,4 @@ def health() -> dict[str, str]:
 
 
 app.include_router(boards.router)
+app.include_router(hydrate.router)

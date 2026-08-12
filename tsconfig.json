@@ -1,0 +1,25 @@
+{
+  "//": [
+    "Root tsconfig — exists so services/orchestrator (③) can resolve the `@/*`",
+    "aliases used throughout apps/web. Per ADR-003 the orchestrator is the SAME",
+    "codebase as ① with a different entrypoint, so it legitimately imports",
+    "lib/llm, services/jd-parser and the Prisma client. tsx reads this from the",
+    "repo root, which is where the worker is started."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./apps/web/*"]
+    }
+  },
+  "include": ["services/orchestrator/**/*.ts", "scripts/**/*.mjs"],
+  "exclude": ["node_modules", "apps/web/.next"]
+}

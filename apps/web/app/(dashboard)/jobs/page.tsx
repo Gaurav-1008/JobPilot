@@ -1,8 +1,9 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface Job {
   id: string;
@@ -15,9 +16,16 @@ interface Job {
   hydrationStatus: string;
 }
 
+const HYDRATION_LABEL: Record<string, string> = {
+  pending: "", hydrated: "parsed", failed: "unreadable", blocked: "blocked",
+};
+
 function JobsTable() {
   const runId = useSearchParams().get("runId");
+  const qc = useQueryClient();
   const [source, setSource] = useState<string>("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [msg, setMsg] = useState<string | null>(null);
 
   const { data: jobs, isPending } = useQuery<Job[]>({
     queryKey: ["jobs", runId],
@@ -26,6 +34,27 @@ function JobsTable() {
   });
 
   const shown = (jobs ?? []).filter((j) => source === "all" || j.source === source);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function hydrateSelected() {
+    if (selected.size === 0) return;
+    setMsg(null);
+    const res = await fetch("/api/jobs/hydrate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobIds: [...selected] }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setMsg(res.ok ? `Fetching ${d.queued} description${d.queued === 1 ? "" : "s"}…` : (d.message ?? "Failed."));
+    setSelected(new Set());
+    void qc.invalidateQueries({ queryKey: ["jobs", runId] });
+  }
   const sources = Array.from(new Set((jobs ?? []).map((j) => j.source))).sort();
 
   // Three distinct states, never shared (EC-P7-01/EC-P2-48): a slow query must
@@ -54,7 +83,16 @@ function JobsTable() {
             </option>
           ))}
         </select>
+
+        {/* FR2 — selected jobs only. There is deliberately no "hydrate all":
+            fetching every scraped row is wasteful and unkind to the boards,
+            and most rows are never opened. */}
+        <button onClick={hydrateSelected} disabled={selected.size === 0}
+          className="ml-auto rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-40">
+          Fetch descriptions ({selected.size})
+        </button>
       </div>
+      {msg && <p role="status" className="mt-2 text-sm text-neutral-700">{msg}</p>}
 
       {shown.length === 0 ? (
         // Distinct from "no jobs at all" — different cause, different action.
@@ -66,12 +104,15 @@ function JobsTable() {
         <ul className="mt-4 divide-y rounded border">
           {shown.map((j) => (
             <li key={j.id} className="px-4 py-3">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <input type="checkbox" checked={selected.has(j.id)}
+                  onChange={() => toggle(j.id)} className="mt-1"
+                  aria-label={`Select ${j.title}`} />
+                <div className="flex flex-1 items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <a href={j.link} target="_blank" rel="noopener noreferrer"
-                    className="font-medium hover:underline">
+                  <Link href={`/jobs/${j.id}`} className="font-medium hover:underline">
                     {j.title}
-                  </a>
+                  </Link>
                   <div className="text-sm text-neutral-600">
                     {j.company}
                     {j.location && ` · ${j.location}`}
@@ -79,10 +120,16 @@ function JobsTable() {
                 </div>
                 <div className="shrink-0 text-right text-xs text-neutral-500">
                   <div>{j.source}</div>
+                  {HYDRATION_LABEL[j.hydrationStatus] && (
+                    <div className={j.hydrationStatus === "hydrated" ? "text-green-700" : "text-amber-700"}>
+                      {HYDRATION_LABEL[j.hydrationStatus]}
+                    </div>
+                  )}
                   {/* posted_at is shown VERBATIM — "2 days ago" is what the
                       board said, and re-rendering a parsed date would be a
                       claim we cannot back up (EC-P2-51). */}
                   {j.postedAt && <div>{j.postedAt}</div>}
+                </div>
                 </div>
               </div>
             </li>
