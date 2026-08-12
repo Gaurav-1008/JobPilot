@@ -25,7 +25,9 @@
     "db:generate": "npm run db:generate --workspace=apps/web",
     "schemas:check": "npm run check --workspace=packages/shared-schemas",
     "db:verify": "node scripts/verify-migration.mjs",
-    "verify:phase1": "node --env-file=.env scripts/verify-phase1.mjs"
+    "verify:phase1": "node --env-file=.env scripts/verify-phase1.mjs",
+    "worker": "npx tsx --env-file=.env services/orchestrator/index.ts",
+    "py:worker": "cd services/python && ../../.venv/bin/python -m uvicorn main:app --port 8000"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.4"
