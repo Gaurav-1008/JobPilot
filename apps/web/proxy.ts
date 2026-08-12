@@ -1,6 +1,9 @@
 /**
  * Route protection + session refresh (P1.1.3).
  *
+ * Named proxy.ts, not middleware.ts: Next 16 renamed the convention and warns
+ * on the old name. Same semantics — this runs before every matched request.
+ *
  * EC-P1-05 — DEFAULT DENY. Everything is protected; public routes are an
  * explicit allow-list. The reverse (protect a named list) means every new route
  * group added later is public until someone remembers to add it — and nobody
@@ -27,7 +30,7 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
