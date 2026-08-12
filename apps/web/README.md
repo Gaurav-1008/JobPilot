@@ -1,3 +1,8 @@
+> **PRE-MERGE DOCUMENT.** This describes Resume Shapeshifter as a standalone
+> app. Parts are now out of date — notably persistence, which moved from
+> `sessionStorage` to Postgres in JobPilot's Phase 1. The platform docs in
+> the repo root `docs/` are authoritative. Kept for history; P7.5.1 reconciles.
+
 # Resume Shapeshifter
 
 JD-to-resume tailoring engine: explainable match scoring, honest gap analysis,

@@ -9,6 +9,7 @@ import {
   rateLimitedResponse,
 } from "@/lib/api-errors";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { requireSession } from "@/lib/auth/session";
 
 // LLM work needs the Node runtime and can exceed the default function budget.
 export const runtime = "nodejs";
@@ -21,6 +22,10 @@ export const maxDuration = 120;
  */
 export async function POST(request: Request) {
   try {
+    // EC-P1-02: auth BEFORE any work or write. A stale session cannot
+    // half-persist, and an unauthenticated caller never reaches the LLM.
+    const { userId } = await requireSession();
+
     const rl = rateLimit(clientIp(request), "analyze", 10, 60_000);
     if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
 
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await analyze(parsed.data.resumeText, parsed.data.jdText);
+    const result = await analyze(userId, parsed.data.resumeText, parsed.data.jdText);
     return NextResponse.json(result);
   } catch (err) {
     return toErrorResponse(err);

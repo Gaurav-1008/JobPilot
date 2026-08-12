@@ -12,7 +12,9 @@ import { analyzeGaps } from "@/services/gap-engine";
 import { tailorResume } from "@/services/tailoring-engine";
 import { buildResumeCorpus, buildTailoredCorpus } from "@/lib/scoring";
 import { checkTailoredResume } from "@/lib/guardrails";
-import { saveRun, getRun } from "@/lib/run-store";
+import { saveRun, getRun } from "@/lib/db/stores/tailoring-run";
+import { getLlmModel } from "@/lib/llm/client";
+import { promptVersion } from "@/prompts/versions";
 import { LlmError } from "@/lib/llm/errors";
 
 function newRunId(): string {
@@ -27,6 +29,7 @@ function newRunId(): string {
  * find gaps. Persists the run so tailor can retrieve it by id.
  */
 export async function analyze(
+  userId: string,
   resumeText: string,
   jdText: string,
   client?: OpenAI,
@@ -58,7 +61,16 @@ export async function analyze(
     gapAnalysis,
     warnings: [],
   };
-  saveRun(run);
+  // P1.3.3 — persisted with the provenance needed to explain this run later:
+  // which model and which prompts (EC-P1-31). Analyze produces no tailored
+  // bullets, so there is nothing for guardrails to check at this point.
+  await saveRun({
+    userId,
+    run,
+    model: getLlmModel(),
+    promptVersion: promptVersion(),
+    guardrail: null,
+  });
 
   return {
     runId: run.id,
@@ -75,10 +87,13 @@ export async function analyze(
  * preserving originals.
  */
 export async function tailor(
+  userId: string,
   runId: string,
   client?: OpenAI,
 ): Promise<TailorResponse> {
-  const run = getRun(runId);
+  // Tenant-scoped: another user's runId resolves to null, so the error below
+  // is indistinguishable from "no such run" (EC-P1-26).
+  const run = await getRun(runId, userId);
   if (!run) {
     throw new LlmError(
       "LLM_UNKNOWN",
@@ -118,7 +133,16 @@ export async function tailor(
     tailoredMatch,
     warnings: guard.warnings,
   };
-  saveRun(updated);
+  // EC-P1-37 — guardrails ran ABOVE; `tailoredResume` is the adjusted version
+  // and `guard` carries every blocked change with its reason (EC-P1-40).
+  // No code path persists a raw, unchecked LLM response.
+  await saveRun({
+    userId,
+    run: updated,
+    model: getLlmModel(),
+    promptVersion: promptVersion(),
+    guardrail: guard,
+  });
 
   return {
     runId: updated.id,

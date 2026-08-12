@@ -6,7 +6,8 @@ import {
 
 /**
  * Pure client-side helpers to fold API responses into the TailoringRun
- * aggregate that the UI renders and persists to sessionStorage.
+ * aggregate that the UI renders. P1.3.8: the run is persisted SERVER-SIDE now
+ * and refetchable from GET /api/runs/:id — sessionStorage is gone.
  */
 
 /** Build an analyzed run from an /api/analyze response. */

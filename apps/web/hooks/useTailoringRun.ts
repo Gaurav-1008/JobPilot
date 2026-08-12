@@ -14,7 +14,7 @@ import {
   getSnapshot,
   getServerSnapshot,
   setRun,
-} from "@/lib/run-client-store";
+} from "@/lib/run-view-store";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -30,8 +30,11 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 /**
- * Owns the current TailoringRun: calls the analyze/tailor API routes and syncs
- * the aggregate to sessionStorage (restored on refresh via the client store).
+ * Owns the current TailoringRun: calls the analyze/tailor API routes and keeps
+ * the assembled aggregate in an in-memory view cache.
+ *
+ * P1.3.8 — the run is persisted SERVER-SIDE now and is refetchable from
+ * GET /api/runs/:id, so refresh-resilience no longer depends on sessionStorage.
  */
 export function useTailoringRun() {
   const run = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);

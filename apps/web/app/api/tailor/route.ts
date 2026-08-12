@@ -11,6 +11,7 @@ import {
   rateLimitedResponse,
 } from "@/lib/api-errors";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { requireSession } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -22,6 +23,7 @@ export const maxDuration = 120;
  */
 export async function POST(request: Request) {
   try {
+    const { userId } = await requireSession();
     const rl = rateLimit(clientIp(request), "tailor", 10, 60_000);
     if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
 
@@ -42,7 +44,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await tailor(parsed.data.runId);
+    const result = await tailor(userId, parsed.data.runId);
     return NextResponse.json(result);
   } catch (err) {
     return toErrorResponse(err);
