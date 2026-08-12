@@ -1,0 +1,327 @@
+// JobPilot data model (P0.3.1 — Prisma, architecture.md §22.1).
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// THE SQL MIGRATION IS THE SOURCE OF TRUTH, NOT THIS FILE.
+//
+// migrations/00000000000000_init/migration.sql is hand-written and carries
+// things Prisma's DSL cannot express:
+//
+//   EC-P0-22  the partial unique index `one_default_resume_per_user`
+//   EC-P0-23  23 CHECK constraints, including platform_rows_are_complete
+//             (EC-P6-24) which is what lets legacy CSV rows import at all
+//   partial indexes on harvest_runs, outreach_attempts
+//
+// This file exists so Prisma can generate a typed client. Treat it as a
+// projection of the SQL, kept in sync by hand.
+//
+// NEVER run `prisma migrate dev` against a schema drift here — Prisma will
+// happily DROP objects it does not know about, including every CHECK above.
+// Use `prisma migrate resolve` / `prisma db pull` and reconcile deliberately.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String   @id @default(uuid()) @db.Uuid
+  email               String   @unique                        // citext in SQL
+  candidateName       String?  @map("candidate_name")
+  candidateBackground String?  @map("candidate_background")
+  portfolioUrl        String?  @map("portfolio_url")
+  linkedinUrl         String?  @map("linkedin_url")
+  // Safe defaults live in the schema, not only in .env.
+  dryRun              Boolean  @default(true) @map("dry_run")
+  sendMode            String   @default("draft") @map("send_mode")
+  maxOutreachPerDay   Int      @default(5) @map("max_outreach_per_day")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  resumes           Resume[]
+  harvestRuns       HarvestRun[]
+  jobs              Job[]
+  applications      Application[]
+  tailoringRuns     TailoringRun[]
+  contacts          Contact[]
+  optOutEntries     OptOutEntry[]
+  reviewEvents      ReviewEvent[]
+  outreachAttempts  OutreachAttempt[]
+  senderCredential  SenderCredential?
+
+  @@map("users")
+}
+
+model Resume {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  version          Int
+  kind             String
+  derivedFromRunId String?  @map("derived_from_run_id") @db.Uuid
+  profile          Json
+  rawText          String   @map("raw_text")   // EC-P1-08: never discarded
+  fileKey          String?  @map("file_key")
+  originalFilename String?  @map("original_filename")
+  isDefault        Boolean  @default(false) @map("is_default")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  derivedFromRun  TailoringRun?  @relation("ResumeDerivedFrom", fields: [derivedFromRunId], references: [id])
+  applications    Application[]
+  tailoringRuns   TailoringRun[] @relation("TailoringRunResume")
+
+  @@unique([userId, version])
+  // NB: `one_default_resume_per_user` is a PARTIAL unique index and lives in
+  // the SQL migration only — Prisma cannot express `WHERE is_default`.
+  @@map("resumes")
+}
+
+model HarvestRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  roleQuery    String    @map("role_query")
+  location     String?
+  boards       String[]
+  status       String    @default("queued")
+  boardResults Json      @default("{}") @map("board_results")
+  startedAt    DateTime? @map("started_at") @db.Timestamptz
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz
+
+  user         User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs         Job[] @relation("JobFirstSeen")
+  jobsLastSeen Job[] @relation("JobLastSeen")
+
+  @@map("harvest_runs")
+}
+
+model Job {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  harvestRunId   String    @map("harvest_run_id") @db.Uuid
+  // EC-P2-19: the run that first saw this job vs. the most recent one.
+  lastSeenRunId  String?   @map("last_seen_run_id") @db.Uuid
+  source         String
+  title          String
+  company        String
+  location       String?
+  link           String
+  postedAt       String?   @map("posted_at")          // verbatim
+  postedAtParsed DateTime? @map("posted_at_parsed") @db.Timestamptz
+  dedupeKey      String    @map("dedupe_key")
+  hydrationStatus String   @default("pending") @map("hydration_status")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  harvestRun     HarvestRun      @relation("JobFirstSeen", fields: [harvestRunId], references: [id], onDelete: Cascade)
+  lastSeenRun    HarvestRun?     @relation("JobLastSeen", fields: [lastSeenRunId], references: [id])
+  jobDescription JobDescription?
+  applications   Application[]
+
+  @@unique([userId, dedupeKey])
+  @@index([harvestRunId])
+  @@index([userId, hydrationStatus])
+  @@map("jobs")
+}
+
+model JobDescription {
+  jobId            String   @id @map("job_id") @db.Uuid
+  rawText          String   @map("raw_text")
+  extractionMethod String   @map("extraction_method")
+  profile          Json
+  extractedAt      DateTime @default(now()) @map("extracted_at") @db.Timestamptz
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_descriptions")
+}
+
+/// Cross-user cache of PUBLIC job-posting text.
+/// EC-P3-05: manual pastes must NEVER be written here — a paste is whatever the
+/// user typed and carries no public-content guarantee.
+model JdCache {
+  urlHash   String   @id @map("url_hash")
+  url       String
+  rawText   String   @map("raw_text")
+  method    String
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz
+
+  @@map("jd_cache")
+}
+
+model Application {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  jobId                String   @map("job_id") @db.Uuid
+  status               String   @default("saved")
+  activeTailoringRunId String?  @map("active_tailoring_run_id") @db.Uuid
+  resumeId             String?  @map("resume_id") @db.Uuid
+  originalScore        Int?     @map("original_score")
+  tailoredScore        Int?     @map("tailored_score")
+  notes                String?
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  // EC-P1-23: Restrict, not Cascade — deleting a resume must not erase the
+  // answer to "which resume did I actually send to this company?".
+  resume           Resume?           @relation(fields: [resumeId], references: [id], onDelete: Restrict)
+  activeTailoring  TailoringRun?     @relation("ApplicationActiveRun", fields: [activeTailoringRunId], references: [id])
+  tailoringRuns    TailoringRun[]    @relation("TailoringRunApplication")
+  contacts         Contact[]
+  outreachAttempts OutreachAttempt[]
+
+  @@unique([userId, jobId])
+  @@index([userId, status])
+  @@map("applications")
+}
+
+model TailoringRun {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  applicationId   String   @map("application_id") @db.Uuid
+  resumeId        String   @map("resume_id") @db.Uuid
+  tier            String
+  matchScore      Json     @map("match_score")
+  tailoredResume  Json?    @map("tailored_resume")
+  gaps            Json     @default("[]")
+  bulletChanges   Json     @default("[]") @map("bullet_changes")
+  // EC-P1-40: blocked rewrites live here as rejected-with-reason, never dropped.
+  guardrailReport Json     @default("{}") @map("guardrail_report")
+  model           String
+  promptVersion   String   @map("prompt_version")   // EC-P1-31
+  tokenUsage      Json?    @map("token_usage")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application        Application         @relation("TailoringRunApplication", fields: [applicationId], references: [id], onDelete: Cascade)
+  resume             Resume              @relation("TailoringRunResume", fields: [resumeId], references: [id], onDelete: Restrict)
+  exportedDocuments  ExportedDocument[]
+  activeForApps      Application[]       @relation("ApplicationActiveRun")
+  derivedResumes     Resume[]            @relation("ResumeDerivedFrom")
+
+  @@index([applicationId, createdAt])
+  @@map("tailoring_runs")
+}
+
+model ExportedDocument {
+  id             String   @id @default(uuid()) @db.Uuid
+  tailoringRunId String   @map("tailoring_run_id") @db.Uuid
+  kind           String
+  fileKey        String   @map("file_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tailoringRun TailoringRun @relation(fields: [tailoringRunId], references: [id], onDelete: Cascade)
+
+  @@unique([tailoringRunId, kind])
+  @@map("exported_documents")
+}
+
+model Contact {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  applicationId       String   @map("application_id") @db.Uuid
+  recipientEmail      String   @map("recipient_email")   // citext in SQL
+  recipientName       String?  @map("recipient_name")
+  /// ADR-008 / EC-P5-07: no default. Every contact declares its provenance.
+  source              String
+  personalizationNote String?  @map("personalization_note")
+  linkedinUrl         String?  @map("linkedin_url")
+  suppressed          Boolean  @default(false)
+  suppressionReason   String?  @map("suppression_reason")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application      Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  outreachAttempts OutreachAttempt[]
+
+  @@unique([userId, applicationId, recipientEmail])
+  @@index([userId, recipientEmail])   // EC-P5-50: dedup on the person
+  @@map("contacts")
+}
+
+model OptOutEntry {
+  userId    String   @map("user_id") @db.Uuid
+  email     String                                     // citext in SQL
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, email])
+  @@map("opt_out_entries")
+}
+
+/// The human gate. EC-P5-43/48: approval binds to specific content via bodyHash.
+model ReviewEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  attemptId      String    @map("attempt_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  reviewedAt     DateTime  @default(now()) @map("reviewed_at") @db.Timestamptz
+  subjectChosen  String    @map("subject_chosen")
+  bodyHash       String    @map("body_hash")
+  tokenHash      String    @unique @map("token_hash")
+  tokenExpiresAt DateTime  @map("token_expires_at") @db.Timestamptz
+  /// EC-P5-44/45: burned via `UPDATE ... WHERE token_used_at IS NULL RETURNING`
+  /// so two concurrent deliveries cannot both win.
+  tokenUsedAt    DateTime? @map("token_used_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("review_events")
+}
+
+model OutreachAttempt {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  /// EC-P6-24: nullable only for origin='legacy_import'. The SQL CHECK
+  /// `platform_rows_are_complete` requires all four on platform rows.
+  applicationId       String?   @map("application_id") @db.Uuid
+  contactId           String?   @map("contact_id") @db.Uuid
+  origin              String    @default("platform")
+  parentId            String?   @map("parent_id") @db.Uuid
+  subject             String
+  bodySnapshot        String?   @map("body_snapshot")
+  bodyHash            String?   @map("body_hash")
+  wordCount           Int       @default(0) @map("word_count")
+  generationSource    String    @map("generation_source")
+  status              String
+  provider            String
+  providerMessageId   String?   @map("provider_message_id")
+  /// EC-P5-59: stamped before the provider call, so a lost response leaves
+  /// evidence a draft may exist despite a 'failed' status.
+  providerAttemptedAt DateTime? @map("provider_attempted_at") @db.Timestamptz
+  errorMessage        String?   @map("error_message")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application?      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  contact     Contact?          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  parent      OutreachAttempt?  @relation("FollowUp", fields: [parentId], references: [id])
+  followUps   OutreachAttempt[] @relation("FollowUp")
+
+  @@index([userId, createdAt])
+  @@index([userId, contactId, status])
+  @@map("outreach_attempts")
+}
+
+model SenderCredential {
+  userId        String    @id @map("user_id") @db.Uuid
+  provider      String
+  ciphertext    Bytes
+  iv            Bytes
+  authTag       Bytes     @map("auth_tag")
+  /// EC-P5-67 / EC-P7-27: rotation needs versioning. Swapping the key in place
+  /// without this bricks every stored credential.
+  keyVersion    Int       @map("key_version")
+  /// EC-P5-63: interlock check 11 reads this; cleared on any auth failure.
+  preflightOkAt DateTime? @map("preflight_ok_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sender_credentials")
+}

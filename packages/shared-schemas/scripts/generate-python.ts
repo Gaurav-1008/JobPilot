@@ -14,9 +14,10 @@
  * it. Hence: pinned generator versions, sorted keys, and a stable model order.
  *
  * EC-P0-14 is enforced rather than documented: this script REFUSES to emit if a
- * wire schema carries a Zod effect (.refine/.transform/.superRefine), because
- * those vanish in JSON Schema and Pydantic would silently accept what Zod
- * rejects.
+ * wire schema carries a .refine()/.superRefine()/.transform(), because those
+ * vanish in JSON Schema and Pydantic would silently accept what Zod rejects.
+ * See assertNoUnrepresentableSchemas() — the detection is version-specific to
+ * zod 4 and must be re-verified after any zod upgrade.
  *
  * EC-P0-17 is enforced too: every wire property must be snake_case.
  */
@@ -27,7 +28,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 
 import { WIRE_SCHEMAS } from "../src/wire";
 
@@ -53,20 +54,66 @@ const HEADER = `# ==============================================================
 /* Guards — fail loudly BEFORE emitting anything                         */
 /* -------------------------------------------------------------------- */
 
-function assertNoZodEffects(): void {
+/**
+ * EC-P0-14 — reject anything JSON Schema cannot carry.
+ *
+ * This guard is written against zod 4's internals, which are NOT the same as
+ * zod 3's. The first version of this file tested
+ * `_def.typeName === "ZodEffects"`, which was correct for zod 3 and silently
+ * passes on zod 4 — a broken guard that reports success. It was caught only by
+ * re-running the deliberate-break test after the version change. Re-run that
+ * test after any zod upgrade; do not assume this still works.
+ *
+ * How zod 4 actually represents these (verified, not assumed):
+ *
+ *   .refine(fn)     -> def.checks contains a check whose `check` is "custom"
+ *   .transform(fn)  -> def.type becomes "pipe"
+ *   .min(1)         -> check "min_length"      <- representable, must NOT flag
+ *   .max(50)        -> check "less_than"       <- representable, must NOT flag
+ *   .email()        -> check "string_format"   <- representable, must NOT flag
+ *
+ * Only "custom" is unrepresentable. Confirmed empirically that
+ * `z.toJSONSchema()` SILENTLY SUCCEEDS on a refined schema and drops the
+ * constraint — it does not throw — so nothing downstream would catch this.
+ */
+function assertNoUnrepresentableSchemas(): void {
   const offenders: string[] = [];
-  for (const [name, schema] of Object.entries(WIRE_SCHEMAS)) {
-    // ZodEffects is what .refine/.transform/.superRefine produce.
-    if ((schema as { _def?: { typeName?: string } })._def?.typeName === "ZodEffects") {
-      offenders.push(name);
+
+  const walk = (node: unknown, path: string, seen: Set<unknown>): void => {
+    if (node === null || typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+
+    const def = (node as { _zod?: { def?: Record<string, unknown> } })._zod?.def;
+    if (def) {
+      if (def.type === "pipe") {
+        offenders.push(`${path} (.transform()/.pipe() — becomes a "pipe" node)`);
+      }
+      const checks = (def.checks ?? []) as Array<{ _zod?: { def?: { check?: string } } }>;
+      for (const c of checks) {
+        if (c?._zod?.def?.check === "custom") {
+          offenders.push(`${path} (.refine()/.superRefine() — a "custom" check)`);
+        }
+      }
     }
+
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      if (k === "parent") continue;
+      walk(v, `${path}.${k}`, seen);
+    }
+  };
+
+  for (const [name, schema] of Object.entries(WIRE_SCHEMAS)) {
+    walk(schema, name, new Set());
   }
+
   if (offenders.length > 0) {
     throw new Error(
-      `EC-P0-14 violation: wire schema(s) carry a Zod effect: ${offenders.join(", ")}.\n` +
-        `.refine()/.transform()/.superRefine() are invisible to JSON Schema, so the\n` +
-        `generated Pydantic model would silently accept what Zod rejects.\n` +
-        `Implement the rule by hand in BOTH languages and add a contract test.`,
+      `EC-P0-14 violation: wire schema(s) carry constraints JSON Schema cannot express:\n` +
+        offenders.map((o) => `  - ${o}`).join("\n") +
+        `\n\nThese vanish in conversion, so the generated Pydantic model would\n` +
+        `silently ACCEPT what Zod rejects — and z.toJSONSchema() does not throw.\n` +
+        `Implement the rule by hand in BOTH languages and add a contract test\n` +
+        `asserting they reject the same payload.`,
     );
   }
 }
@@ -113,12 +160,13 @@ function buildJsonSchema(): Record<string, unknown> {
   const names = Object.keys(WIRE_SCHEMAS).sort();
   const definitions: Record<string, unknown> = {};
   for (const name of names) {
-    const jsonSchema = zodToJsonSchema(
+    // zod 4 ships JSON Schema conversion natively, so there is no third-party
+    // converter to keep in step with the zod version. `io: "input"` describes
+    // what a caller may SEND, which is what ④ validates on the way in.
+    definitions[name] = z.toJSONSchema(
       WIRE_SCHEMAS[name as keyof typeof WIRE_SCHEMAS],
-      { name, target: "jsonSchema7", $refStrategy: "none" },
-    ) as Record<string, unknown>;
-    const defs = (jsonSchema.definitions ?? {}) as Record<string, unknown>;
-    definitions[name] = defs[name] ?? jsonSchema;
+      { target: "draft-7", io: "input" },
+    ) as unknown as Record<string, unknown>;
   }
   return {
     $schema: "http://json-schema.org/draft-07/schema#",
@@ -130,7 +178,7 @@ function buildJsonSchema(): Record<string, unknown> {
 }
 
 function generate(): string {
-  assertNoZodEffects();
+  assertNoUnrepresentableSchemas();
   const schema = buildJsonSchema();
   assertSnakeCaseProperties(schema.definitions as Record<string, unknown>);
 

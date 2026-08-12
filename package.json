@@ -19,7 +19,10 @@
     "py:install": "python3 -m pip install -r services/python/requirements.txt",
     "py:harvest": "python3 services/python/harvester/harvester.py",
     "py:outreach": "python3 services/python/outreach/main.py",
-    "schemas:gen": "echo 'P0.2.4 not implemented yet' && exit 1",
-    "db:migrate": "echo 'P0.3.2 not implemented yet' && exit 1"
+    "schemas:gen": "npm run generate --workspace=packages/shared-schemas",
+    "db:migrate": "npm run db:migrate --workspace=apps/web",
+    "db:seed": "npm run db:seed --workspace=apps/web",
+    "db:generate": "npm run db:generate --workspace=apps/web",
+    "schemas:check": "npm run check --workspace=packages/shared-schemas"
   }
 }

@@ -16,22 +16,16 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, conint, constr
+from pydantic import AnyUrl, BaseModel, conint, constr
 
 
 class BoardSearchRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     limit: conint(ge=1, le=50)
     location: Optional[constr(max_length=200)] = None
     role: constr(min_length=1, max_length=200)
 
 
 class Job(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     company: str
     link: str
     location: Optional[str] = None
@@ -41,13 +35,10 @@ class Job(BaseModel):
 
 
 class BoardSearchResponse(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     error: Optional[str] = None
     jobs: list[Job]
     partial: bool
-    response_bytes: Optional[conint(ge=0)] = None
+    response_bytes: Optional[conint(ge=0, le=9007199254740991)] = None
 
 
 class Provider(Enum):
@@ -56,15 +47,12 @@ class Provider(Enum):
 
 
 class Credentials(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     gmail_access_token: Optional[str] = None
     provider: Provider
     sender_name: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_password: Optional[str] = None
-    smtp_port: Optional[int] = None
+    smtp_port: Optional[conint(ge=-9007199254740991, le=9007199254740991)] = None
     smtp_user: Optional[str] = None
 
 
@@ -75,9 +63,6 @@ class Mode(Enum):
 
 
 class EmailDeliverRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     body: str
     credentials: Credentials
     mode: Mode
@@ -92,18 +77,12 @@ class Status(Enum):
 
 
 class EmailDeliverResponse(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     error: Optional[str] = None
     provider_message_id: Optional[str] = None
     status: Status
 
 
 class Contact(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     company: str
     job_url: Optional[str] = None
     personalization_note: Optional[str] = None
@@ -113,20 +92,14 @@ class Contact(BaseModel):
 
 
 class Personalization(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     honest_gaps: list[str]
     jd_hooks: list[str]
-    match_score: int
+    match_score: conint(ge=-9007199254740991, le=9007199254740991)
     strongest_bullet: Optional[str] = None
     top_matched_skills: list[str]
 
 
 class Sender(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     candidate_background: str
     candidate_name: str
     linkedin_url: Optional[str] = None
@@ -134,14 +107,11 @@ class Sender(BaseModel):
 
 
 class EmailGenerateRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     contact: Contact
     personalization: Optional[Personalization] = None
     sender: Sender
     use_llm: bool
-    word_limit: conint(ge=1)
+    word_limit: conint(ge=1, le=9007199254740991)
 
 
 class Source(Enum):
@@ -150,20 +120,14 @@ class Source(Enum):
 
 
 class EmailGenerateResponse(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     body: str
     source: Source
     subject_options: list[str]
     warnings: list[str]
-    word_count: conint(ge=0)
+    word_count: conint(ge=0, le=9007199254740991)
 
 
 class HydrateRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     url: AnyUrl
 
 
@@ -173,9 +137,6 @@ class Method(Enum):
 
 
 class HydrateResponse(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     blocked: bool
     method: Method
     raw_text: str
@@ -183,37 +144,25 @@ class HydrateResponse(BaseModel):
 
 
 class Credentials1(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     gmail_access_token: Optional[str] = None
     provider: Provider
     sender_name: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_password: Optional[str] = None
-    smtp_port: Optional[int] = None
+    smtp_port: Optional[conint(ge=-9007199254740991, le=9007199254740991)] = None
     smtp_user: Optional[str] = None
 
 
 class PreflightRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     credentials: Credentials1
 
 
 class PreflightResponse(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     ok: bool
     reason: Optional[str] = None
 
 
 class RawJob(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     company: str
     link: str
     location: Optional[str] = None
@@ -223,9 +172,6 @@ class RawJob(BaseModel):
 
 
 class SenderIdentity(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     candidate_background: str
     candidate_name: str
     linkedin_url: Optional[str] = None
@@ -233,9 +179,6 @@ class SenderIdentity(BaseModel):
 
 
 class WireContact(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     company: str
     job_url: Optional[str] = None
     personalization_note: Optional[str] = None
@@ -245,25 +188,19 @@ class WireContact(BaseModel):
 
 
 class WireCredentials(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     gmail_access_token: Optional[str] = None
     provider: Provider
     sender_name: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_password: Optional[str] = None
-    smtp_port: Optional[int] = None
+    smtp_port: Optional[conint(ge=-9007199254740991, le=9007199254740991)] = None
     smtp_user: Optional[str] = None
 
 
 class WirePersonalization(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     honest_gaps: list[str]
     jd_hooks: list[str]
-    match_score: int
+    match_score: conint(ge=-9007199254740991, le=9007199254740991)
     strongest_bullet: Optional[str] = None
     top_matched_skills: list[str]
 
