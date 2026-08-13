@@ -1001,7 +1001,22 @@ Running the full chain across 20 jobs is the cost/latency risk the problem state
 └──────────────────────────────────────────────────────┘
 ```
 
-**Roughly 40× cheaper** per harvest than running Tier 2 across the board, and the ranking is good enough for its only job: deciding where to spend Tier 2.
+**Measured, not estimated** (P4, `llama-3.1-8b-instant`, batch of 5):
+
+| Batch | Prompt tokens | Per job |
+|-------|---------------|---------|
+| 1 | 337 | 337 |
+| 3 | 467 | 156 |
+| 5 | 597 | **119** |
+
+Prompt tokens grow by ~65 per additional job rather than ~337, which is the
+resume travelling **once per batch** (EC-P4-16). At batch 5 that is a **65%
+saving** against one request per job.
+
+Counting prompt + completion, Tier 1 costs ~228 tokens/job against ~15,000 for a
+Tier-2 chain — **roughly 66× cheaper per job**. The original ~40× estimate was
+conservative. And the ranking is good enough for its only job: deciding where to
+spend Tier 2.
 
 Tier 0 results are advisory. A job filtered out at Tier 0 is still visible under a "low fit" filter and can be tailored on demand — a heuristic must never hard-block a user from a job they want.
 
@@ -1465,7 +1480,7 @@ Resolved before Phase 0 by taking the documented default in each case. Revisit o
 Each needs a decision before the phase that depends on it.
 
 3. **`posted_at` normalization** — boards emit `"2 days ago"`, `"Today"`, and absolute dates. `posted_at_parsed` is best-effort; how aggressively to parse per board is a Phase 2 detail.
-4. **Tier-1 batching** — 5 jobs per request is a guess. Needs measurement against real token limits and Groq latency.
+4. ~~**Tier-1 batching**~~ — **DECIDED: 5 per request**, sized by estimated tokens. Measured 119 prompt tokens/job at batch 5 vs 337 at batch 1; the curve is flat by 5, and larger batches widen the blast radius when one response is malformed (EC-P4-10).
 5. **SSE vs polling** — SSE is specified with a polling fallback. If the deployment target complicates streaming, polling alone is acceptable; the durable `board_results` record makes it work either way.
 6. **Follow-up cadence `N`** — 5 days? 7? User-configurable? Product decision, Phase 6.
 7. **PDF rendering location** — stays in ① until Playwright-in-serverless causes trouble; ④ is the pre-planned move (§17).

@@ -8,7 +8,7 @@
 import { Queue } from "bullmq";
 import Redis from "ioredis";
 
-import { QUEUE_NAME, runJobId, hydrateJobId, type HarvestRunJob, type HydrateJobPayload } from "./types";
+import { QUEUE_NAME, runJobId, hydrateJobId, scoreBatchJobId, type HarvestRunJob, type HydrateJobPayload, type ScoreBatchPayload } from "./types";
 
 const g = globalThis as unknown as { __jobpilotQueue?: Queue; __jobpilotRedis?: Redis };
 
@@ -49,4 +49,14 @@ export async function enqueueHydrate(jobs: HydrateJobPayload[]): Promise<void> {
       removeOnFail: 200,
     }),
   ));
+}
+
+/** P4.3.1 — batch scoring is queued: 20 jobs is minutes of LLM work. */
+export async function enqueueScoreBatch(data: ScoreBatchPayload): Promise<void> {
+  await harvestQueue().add("score:batch", data, {
+    jobId: scoreBatchJobId(data.userId, data.harvestRunId),
+    attempts: 1,   // EC-P4-14: partial progress persists; a blind retry rescores
+    removeOnComplete: 20,
+    removeOnFail: 20,
+  });
 }

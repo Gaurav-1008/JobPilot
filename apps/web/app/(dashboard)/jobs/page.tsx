@@ -14,18 +14,39 @@ interface Job {
   link: string;
   postedAt: string | null;
   hydrationStatus: string;
+  score: number | null;
+  tailoredScore: number | null;
+  tier: "heuristic" | "cheap" | "full" | null;
+  explanation: string | null;
+  skillCoverage: number | null;
+  scoreIsStale: boolean;
 }
 
 const HYDRATION_LABEL: Record<string, string> = {
   pending: "", hydrated: "parsed", failed: "unreadable", blocked: "blocked",
 };
 
+/**
+ * EC-P4-25 — every score says which tier produced it. Sorting across mixed
+ * tiers is approximate, and hiding that would present a heuristic guess and a
+ * full prompt-chain result as the same kind of number.
+ */
+const TIER_LABEL: Record<string, string> = {
+  heuristic: "quick estimate",
+  cheap: "scored",
+  full: "fully tailored",
+};
+
+/** EC-P4-02 / P4.1.3 — a VIEW, not a filter. Low-fit jobs stay reachable. */
+const LOW_FIT_MAX = 20;
+
 function JobsTable() {
   const runId = useSearchParams().get("runId");
   const qc = useQueryClient();
-  const [source, setSource] = useState<string>("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [source, setSource] = useState("all");
+  const [band, setBand] = useState<"all" | "strong" | "low" | "unscored">("all");
   const [msg, setMsg] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data: jobs, isPending } = useQuery<Job[]>({
     queryKey: ["jobs", runId],
@@ -33,7 +54,7 @@ function JobsTable() {
       (await (await fetch(`/api/jobs${runId ? `?runId=${runId}` : ""}`)).json()).jobs ?? [],
   });
 
-  const shown = (jobs ?? []).filter((j) => source === "all" || j.source === source);
+  const refresh = () => qc.invalidateQueries({ queryKey: ["jobs", runId] });
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -45,92 +66,151 @@ function JobsTable() {
 
   async function hydrateSelected() {
     if (selected.size === 0) return;
-    setMsg(null);
     const res = await fetch("/api/jobs/hydrate", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobIds: [...selected] }),
     });
     const d = await res.json().catch(() => ({}));
-    setMsg(res.ok ? `Fetching ${d.queued} description${d.queued === 1 ? "" : "s"}…` : (d.message ?? "Failed."));
+    setMsg(res.ok ? `Fetching ${d.queued} description${d.queued === 1 ? "" : "s"}…` : d.message);
     setSelected(new Set());
-    void qc.invalidateQueries({ queryKey: ["jobs", runId] });
+    void refresh();
   }
-  const sources = Array.from(new Set((jobs ?? []).map((j) => j.source))).sort();
 
-  // Three distinct states, never shared (EC-P7-01/EC-P2-48): a slow query must
-  // not look like "no results".
-  if (isPending) {
-    return <p className="mt-8 text-sm text-neutral-500">Loading…</p>;
+  async function scoreAll() {
+    const res = await fetch("/api/jobs/score-batch", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ harvestRunId: runId }),
+    });
+    const d = await res.json().catch(() => ({}));
+    // A 200 with queued:0 is the "hydrate something first" case, not an error.
+    setMsg(d.message ?? (res.ok ? `Scoring ${d.queued} jobs…` : "Could not start scoring."));
+    void refresh();
   }
-  if (!jobs || jobs.length === 0) {
+
+  const all = jobs ?? [];
+  const sources = Array.from(new Set(all.map((j) => j.source))).sort();
+
+  const shown = all.filter((j) => {
+    if (source !== "all" && j.source !== source) return false;
+    if (band === "strong") return j.score !== null && j.score > LOW_FIT_MAX;
+    if (band === "low") return j.score !== null && j.score <= LOW_FIT_MAX;
+    if (band === "unscored") return j.score === null;
+    return true;
+  });
+
+  const lowFitCount = all.filter((j) => j.score !== null && j.score <= LOW_FIT_MAX).length;
+  const hydratedCount = all.filter((j) => j.hydrationStatus === "hydrated").length;
+
+  if (isPending) return <p className="mt-8 text-sm text-neutral-500">Loading…</p>;
+  if (all.length === 0) {
     return (
       <p className="mt-8 text-sm text-neutral-500">
-        No jobs yet. Run a search to populate the board.
+        No jobs yet. <Link href="/search" className="underline">Run a search</Link> to
+        populate the board.
       </p>
     );
   }
 
   return (
     <>
-      <div className="mt-6 flex items-center gap-3 text-sm">
-        <span className="text-neutral-500">Source</span>
+      <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
         <select value={source} onChange={(e) => setSource(e.target.value)}
-          className="rounded border px-2 py-1">
-          <option value="all">all ({jobs.length})</option>
+          className="rounded border px-2 py-1" aria-label="Filter by source">
+          <option value="all">all sources ({all.length})</option>
           {sources.map((s) => (
-            <option key={s} value={s}>
-              {s} ({jobs.filter((j) => j.source === s).length})
-            </option>
+            <option key={s} value={s}>{s} ({all.filter((j) => j.source === s).length})</option>
           ))}
         </select>
 
-        {/* FR2 — selected jobs only. There is deliberately no "hydrate all":
-            fetching every scraped row is wasteful and unkind to the boards,
-            and most rows are never opened. */}
+        <select value={band} onChange={(e) => setBand(e.target.value as typeof band)}
+          className="rounded border px-2 py-1" aria-label="Filter by score">
+          <option value="all">all scores</option>
+          <option value="strong">good fit</option>
+          {/* EC-P4-02 — low-fit jobs are one click away and fully tailorable.
+              A heuristic must never be the reason a job is unreachable. */}
+          <option value="low">low fit ({lowFitCount})</option>
+          <option value="unscored">not scored yet</option>
+        </select>
+
         <button onClick={hydrateSelected} disabled={selected.size === 0}
-          className="ml-auto rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-40">
+          className="rounded border px-3 py-1 disabled:opacity-40">
           Fetch descriptions ({selected.size})
+        </button>
+
+        <button onClick={scoreAll} disabled={hydratedCount === 0}
+          className="rounded bg-black px-3 py-1 text-white disabled:opacity-40">
+          Score {hydratedCount} against my resume
         </button>
       </div>
       {msg && <p role="status" className="mt-2 text-sm text-neutral-700">{msg}</p>}
 
       {shown.length === 0 ? (
-        // Distinct from "no jobs at all" — different cause, different action.
         <p className="mt-8 text-sm text-neutral-500">
-          No jobs match this filter.{" "}
-          <button onClick={() => setSource("all")} className="underline">Clear</button>
+          No jobs match these filters.{" "}
+          <button onClick={() => { setSource("all"); setBand("all"); }} className="underline">
+            Clear
+          </button>
         </p>
       ) : (
         <ul className="mt-4 divide-y rounded border">
           {shown.map((j) => (
-            <li key={j.id} className="px-4 py-3">
-              <div className="flex items-start gap-3">
-                <input type="checkbox" checked={selected.has(j.id)}
-                  onChange={() => toggle(j.id)} className="mt-1"
-                  aria-label={`Select ${j.title}`} />
-                <div className="flex flex-1 items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <Link href={`/jobs/${j.id}`} className="font-medium hover:underline">
-                    {j.title}
-                  </Link>
-                  <div className="text-sm text-neutral-600">
-                    {j.company}
-                    {j.location && ` · ${j.location}`}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right text-xs text-neutral-500">
-                  <div>{j.source}</div>
-                  {HYDRATION_LABEL[j.hydrationStatus] && (
-                    <div className={j.hydrationStatus === "hydrated" ? "text-green-700" : "text-amber-700"}>
-                      {HYDRATION_LABEL[j.hydrationStatus]}
+            <li key={j.id} className="flex items-start gap-3 px-4 py-3">
+              <input type="checkbox" checked={selected.has(j.id)}
+                onChange={() => toggle(j.id)} className="mt-1"
+                aria-label={`Select ${j.title}`} />
+
+              {/* The score column — the point of the phase. */}
+              <div className="w-16 shrink-0 text-center">
+                {j.score === null ? (
+                  <span className="text-xs text-neutral-400">—</span>
+                ) : (
+                  <>
+                    <div className={`text-lg font-semibold ${
+                      j.score >= 70 ? "text-green-700"
+                        : j.score > LOW_FIT_MAX ? "text-neutral-800" : "text-neutral-400"}`}>
+                      {j.tailoredScore ?? j.score}
                     </div>
-                  )}
-                  {/* posted_at is shown VERBATIM — "2 days ago" is what the
-                      board said, and re-rendering a parsed date would be a
-                      claim we cannot back up (EC-P2-51). */}
-                  {j.postedAt && <div>{j.postedAt}</div>}
+                    {j.tier && (
+                      <div className="text-[10px] leading-tight text-neutral-500">
+                        {TIER_LABEL[j.tier]}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <Link href={`/jobs/${j.id}`} className="font-medium hover:underline">
+                  {j.title}
+                </Link>
+                <div className="text-sm text-neutral-600">
+                  {j.company}{j.location && ` · ${j.location}`}
                 </div>
-                </div>
+                {j.explanation && (
+                  <p className="mt-1 text-xs text-neutral-500">{j.explanation}</p>
+                )}
+                {/* EC-P4-20 — a stale score that looks current is a lie. */}
+                {j.scoreIsStale && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Scored against an older resume version — rescore to update.
+                  </p>
+                )}
+              </div>
+
+              <div className="shrink-0 text-right text-xs text-neutral-500">
+                <div>{j.source}</div>
+                {HYDRATION_LABEL[j.hydrationStatus] && (
+                  <div className={j.hydrationStatus === "hydrated" ? "text-green-700" : "text-amber-700"}>
+                    {HYDRATION_LABEL[j.hydrationStatus]}
+                  </div>
+                )}
+                {j.postedAt && <div>{j.postedAt}</div>}
+                {j.hydrationStatus === "hydrated" && (
+                  <Link href={`/tailor/${j.id}`}
+                    className="mt-1 inline-block rounded border px-2 py-0.5 text-xs text-neutral-800">
+                    Tailor
+                  </Link>
+                )}
               </div>
             </li>
           ))}
@@ -142,13 +222,11 @@ function JobsTable() {
 
 export default function JobsPage() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="text-2xl font-semibold">Jobs</h1>
       <p className="mt-1 text-sm text-neutral-600">
-        Deduplicated across boards and across searches.
+        Deduplicated across boards and searches, ranked against your default resume.
       </p>
-      {/* useSearchParams needs a Suspense boundary to prerender — the same
-          thing that broke the build on /sign-in. */}
       <Suspense fallback={<p className="mt-8 text-sm text-neutral-500">Loading…</p>}>
         <JobsTable />
       </Suspense>

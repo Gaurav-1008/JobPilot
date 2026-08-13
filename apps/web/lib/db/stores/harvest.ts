@@ -37,17 +37,71 @@ export async function getHarvestRun(id: string, userId: string) {
   return { ...run, jobCount };
 }
 
+/**
+ * The ranked board (P4.3.2).
+ *
+ * EC-P4-27 — unscored jobs sort LAST, never as zero. Treating "not evaluated"
+ * as a zero score buries a job the user simply has not scored yet.
+ *
+ * EC-P4-20 — `scoredResumeId` comes back so the UI can say "scored against v2,
+ * current is v3". A stale score that looks current makes the ranking a lie.
+ */
 export async function listJobs(userId: string, runId?: string | null) {
-  return prisma.job.findMany({
+  const jobs = await prisma.job.findMany({
     where: { userId, ...(runId ? { harvestRunId: runId } : {}) },
-    // EC-P4-27: unscored/undated rows sort LAST, never as zero.
-    orderBy: [{ postedAtParsed: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
     take: 200,
     select: {
       id: true, source: true, title: true, company: true, location: true,
-      link: true, postedAt: true, hydrationStatus: true, createdAt: true,
+      link: true, postedAt: true, postedAtParsed: true,
+      hydrationStatus: true, createdAt: true,
+      applications: {
+        where: { userId },
+        select: {
+          originalScore: true, tailoredScore: true, status: true, resumeId: true,
+          tailoringRuns: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { tier: true, matchScore: true },
+          },
+        },
+        take: 1,
+      },
     },
   });
+
+  const defaultResume = await prisma.resume.findFirst({
+    where: { userId, isDefault: true }, select: { id: true, version: true },
+  });
+
+  return jobs
+    .map((j) => {
+      const app = j.applications[0];
+      const run = app?.tailoringRuns[0];
+      const ms = run?.matchScore as Record<string, unknown> | undefined;
+      return {
+        id: j.id, source: j.source, title: j.title, company: j.company,
+        location: j.location, link: j.link, postedAt: j.postedAt,
+        hydrationStatus: j.hydrationStatus,
+        score: app?.originalScore ?? null,
+        tailoredScore: app?.tailoredScore ?? null,
+        tier: run?.tier ?? null,
+        explanation: typeof ms?.explanation === "string" ? ms.explanation : null,
+        skillCoverage: typeof ms?.skillCoverageScore === "number"
+          ? ms.skillCoverageScore
+          : typeof ms?.skillCoveragePct === "number" ? ms.skillCoveragePct : null,
+        // EC-P4-20: true when the score predates the current default resume.
+        scoreIsStale: Boolean(
+          app?.resumeId && defaultResume && app.resumeId !== defaultResume.id,
+        ),
+      };
+    })
+    .sort((a, b) => {
+      // Scored first, by score desc. Unscored keep recency order, last.
+      if (a.score === null && b.score === null) return 0;
+      if (a.score === null) return 1;
+      if (b.score === null) return -1;
+      return b.score - a.score;
+    });
 }
 
 /**
@@ -106,4 +160,55 @@ export async function getJobWithDescription(id: string, userId: string) {
       },
     },
   });
+}
+
+/** EC-P4-22 — scoring needs hydrated JDs; count before queueing a run. */
+export async function countHydratedJobs(userId: string, runId?: string | null) {
+  return prisma.job.count({
+    where: { userId, hydrationStatus: "hydrated", ...(runId ? { harvestRunId: runId } : {}) },
+  });
+}
+
+/**
+ * Record a completed Tier-2 run against its application (P4.4.3).
+ *
+ * EC-P4-31 — called only after the chain succeeded AND guardrails ran. Setting
+ * `tailored` optimistically before the run completes leaves a status claiming
+ * work that never happened.
+ *
+ * EC-P4-30 — `tailoredScore` is stored as-is even when it is LOWER than the
+ * original. An honest regression is information; a hidden one is a broken
+ * promise about explainability.
+ */
+export async function finaliseTailoredScore(input: {
+  userId: string; jobId: string; resumeId: string; runId: string;
+  originalScore: number; tailoredScore: number;
+}) {
+  const app = await prisma.application.upsert({
+    where: { userId_jobId: { userId: input.userId, jobId: input.jobId } },
+    update: {
+      status: "tailored",
+      originalScore: input.originalScore,
+      tailoredScore: input.tailoredScore,
+      resumeId: input.resumeId,
+      activeTailoringRunId: input.runId,
+    },
+    create: {
+      userId: input.userId, jobId: input.jobId,
+      status: "tailored",
+      originalScore: input.originalScore,
+      tailoredScore: input.tailoredScore,
+      resumeId: input.resumeId,
+      activeTailoringRunId: input.runId,
+    },
+  });
+
+  // The run was created by the orchestrator store without an application (a
+  // Phase 1 standalone run); attach it now that one exists.
+  await prisma.tailoringRun.updateMany({
+    where: { id: input.runId, userId: input.userId },
+    data: { applicationId: app.id, resumeId: input.resumeId, tier: "full" },
+  });
+
+  return app;
 }

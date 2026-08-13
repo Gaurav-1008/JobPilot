@@ -18,7 +18,11 @@ import { QUEUE_NAME } from "../../apps/web/lib/queue/types";
 import { BoardCircuitBreaker, BoardRateLimiter } from "./lib/board-circuit";
 import { handleHarvestBoard, handleHarvestRun, finaliseRun, type Deps } from "./handlers/harvest";
 import { handleHydrateJob, type HydrateDeps } from "./handlers/hydrate";
+import { handleScoreBatch, type ScoreBatchDeps } from "./handlers/score-batch";
+import { SCORING_SYSTEM_PROMPT } from "../../apps/web/prompts/scoring-cheap";
+import { createLlmClient } from "../../apps/web/lib/llm/client";
 import { parseJobDescription } from "../../apps/web/services/jd-parser";
+import { promptVersion } from "../../apps/web/prompts/versions";
 
 const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
   maxRetriesPerRequest: null,   // required by BullMQ
@@ -103,6 +107,39 @@ const hydrateDeps: HydrateDeps = {
   extractProfile: (rawText) => parseJobDescription(rawText),
 };
 
+const SCORING_MODEL = process.env.SCORING_MODEL ?? "llama-3.1-8b-instant";
+
+const scoreDeps: ScoreBatchDeps = {
+  prisma,
+  redis: connection,
+  systemPrompt: SCORING_SYSTEM_PROMPT,
+  model: SCORING_MODEL,
+  promptVersion: promptVersion(),
+  scoreWithLlm: async (system, user) => {
+    const client = createLlmClient();
+    const res = await client.chat.completions.create({
+      model: SCORING_MODEL,
+      temperature: 0,                                  // ranking, not writing
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+    const raw = res.choices[0]?.message?.content ?? "{}";
+    // Strip a markdown fence if the model adds one despite json_object.
+    const cleaned = raw.replace(/^```(?:json)?\n?|```$/g, "").trim();
+    const parsed = JSON.parse(cleaned) as { results?: unknown };
+    return {
+      results: Array.isArray(parsed.results) ? (parsed.results as never) : [],
+      tokens: {
+        prompt: res.usage?.prompt_tokens ?? 0,
+        completion: res.usage?.completion_tokens ?? 0,
+      },
+    };
+  },
+};
+
 const worker = new Worker(
   QUEUE_NAME,
   async (job) => {
@@ -112,6 +149,7 @@ const worker = new Worker(
       return finaliseRun(deps, job.data.runId);
     }
     if (job.name === "hydrate:job") return handleHydrateJob(hydrateDeps, job.data);
+    if (job.name === "score:batch") return handleScoreBatch(scoreDeps, job.data);
   },
   {
     connection,

@@ -855,7 +855,7 @@ From [`architecture.md`](./architecture.md) §22.
 | # | Decision | Decide by | Default if undecided |
 |---|----------|-----------|---------------------|
 | 3 | `posted_at` normalization depth | P2.4.4 | Best-effort, per board, non-blocking |
-| 4 | Tier-1 batch size | P4.2.2 | Start at 5, measure, record |
+| ~~4~~ | ~~Tier-1 batch size~~ | ✅ P4.2.2 | **5, measured** — 119 prompt tok/job vs 337 at batch 1 |
 | 5 | SSE vs polling | P2.3.7 | Ship both; polling is the fallback |
 | 6 | Follow-up cadence N | P6.2.5 | 7 days |
 | 7 | PDF rendering location | P7.4.1 | Stay in ①; move to ④ only if serverless bites |

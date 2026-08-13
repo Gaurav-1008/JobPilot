@@ -31,7 +31,12 @@ export interface HydrateJobPayload {
   userId: string;
 }
 
-export type JobName = "harvest:run" | "harvest:board" | "hydrate:job";
+export interface ScoreBatchPayload {
+  userId: string;
+  harvestRunId: string | null;
+}
+
+export type JobName = "harvest:run" | "harvest:board" | "hydrate:job" | "score:batch";
 
 /**
  * `harvest-{runId}-{board}` — a redelivery maps onto the same id.
@@ -52,4 +57,9 @@ export function runJobId(runId: string): string {
 /** P3.2.1 — deterministic, so a redelivery cannot re-fetch the same page. */
 export function hydrateJobId(jobId: string): string {
   return `hydrate-${jobId}`;
+}
+
+/** P4.2.3 — one in-flight scoring pass per user (§10.1: concurrency 1/user). */
+export function scoreBatchJobId(userId: string, runId: string | null): string {
+  return `score-${userId}-${runId ?? "all"}`;
 }
