@@ -403,7 +403,7 @@ No scoring against the resume. The JD is parsed and displayed; nothing compares 
 | # | Task | Marker | Where |
 |---|------|--------|-------|
 | P4.2.1 | Trimmed scoring prompt targeting `SCORING_MODEL` | 🟡 | ③ |
-| P4.2.2 | Batch N jobs per request (start at 5, measure — open question §22.4) | 🔴 | ③ |
+| P4.2.2 | Batch N jobs per request (start at 5, measure — open question §22.2 Q4) | 🔴 | ③ |
 | P4.2.3 | `score:batch` handler; upsert `applications` with `original_score` | 🔴 | ③ |
 | P4.2.4 | Persist a `tailoring_runs` row with `tier='cheap'`, no `tailored_resume` | 🔴 | ③ |
 | P4.2.5 | Reuse existing Zod validation + single structured retry | 🟢 | ③ |
@@ -450,7 +450,7 @@ No contacts, no email. The pipeline ends at a proof PDF — exactly where Resume
 
 ### Exit gate → Phase 5
 
-- [ ] Tier-1 batch size chosen from measurement, and the number recorded in `architecture.md` §22.4
+- [ ] Tier-1 batch size chosen from measurement, and the number recorded in `architecture.md` §22.2 Q4
 - [ ] `orchestrator.ts`'s single-job path is byte-identical in behavior to Phase 1
 
 ---
