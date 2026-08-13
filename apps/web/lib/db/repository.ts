@@ -21,6 +21,7 @@
  * an enumeration oracle across the whole platform.
  */
 
+import { domainKey } from "@/lib/outreach/email-address";
 import { prisma } from "./client";
 
 /**
@@ -127,10 +128,25 @@ export function scoped(userId: string) {
     },
 
     optOut: {
-      /** EC-P5-17/18: evaluated at SEND time, not at contact creation. A row */
-      /** created before the opt-out must still be blocked. CITEXT handles case. */
-      isSuppressed: async (email: string) =>
-        (await prisma.optOutEntry.findFirst({ where: { userId, email } })) !== null,
+      /**
+       * EC-P5-17/18: evaluated at SEND time, not at contact creation. A row
+       * created before the opt-out must still be blocked. CITEXT handles case —
+       * the comparison goes through the column type, not an application-side
+       * `toLowerCase()`, so a differently-cased entry still matches.
+       *
+       * EC-P5-16: an entry may be a single address or a whole `@domain`. Both
+       * forms are tested in one query; checking only the address would let a
+       * domain-level opt-out the user believed they had set never fire.
+       *
+       * Callers must pass an address already through `normalizeEmail()`.
+       */
+      isSuppressed: async (email: string) => {
+        const hit = await prisma.optOutEntry.findFirst({
+          where: { userId, email: { in: [email, domainKey(email)] } },
+          select: { email: true },
+        });
+        return hit !== null;
+      },
     },
 
     outreach: {
@@ -179,6 +195,30 @@ export function scoped(userId: string) {
     credentials: {
       get: () => prisma.senderCredential.findUnique({ where: { userId } }),
     },
+
+    /**
+     * The user's own row, including the three outreach safety settings.
+     *
+     * The interlock chain reads `dryRun`, `sendMode`, and `maxOutreachPerDay`
+     * HERE, at delivery time, rather than trusting anything the client sent or
+     * anything read earlier in the request. EC-P5-55: a user may flip dry_run
+     * between approving and sending, and the value that must win is the one in
+     * the database at the moment of delivery.
+     */
+    profile: () =>
+      prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: {
+          email: true,
+          candidateName: true,
+          candidateBackground: true,
+          portfolioUrl: true,
+          linkedinUrl: true,
+          dryRun: true,
+          sendMode: true,
+          maxOutreachPerDay: true,
+        },
+      }),
   };
 }
 
