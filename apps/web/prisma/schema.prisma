@@ -327,6 +327,9 @@ model SenderCredential {
   keyVersion    Int       @map("key_version")
   /// EC-P5-63: interlock check 11 reads this; cleared on any auth failure.
   preflightOkAt DateTime? @map("preflight_ok_at") @db.Timestamptz
+  /// EC-P5-65: which OAuth scopes were actually granted. NULL means "unknown",
+  /// which check 12 treats as "do not assume sending is allowed".
+  grantedScopes String?   @map("granted_scopes")
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

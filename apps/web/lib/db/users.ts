@@ -54,6 +54,38 @@ export async function getProfile(userId: string) {
   });
 }
 
+/**
+ * The three outreach safety columns (P5.5.10).
+ *
+ * Separate from `updateProfile` on purpose. EC-P1-07 kept these off the profile
+ * patch type so a devtools request could not flip the safety posture before the
+ * interlocks existed; keeping them separate now means the gate in
+ * /api/outreach/settings is the only way they change.
+ */
+export async function getOutreachSettings(userId: string) {
+  return prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { dryRun: true, sendMode: true, maxOutreachPerDay: true },
+  });
+}
+
+export interface OutreachSettingsPatch {
+  dryRun?: boolean;
+  sendMode?: "draft" | "send";
+  maxOutreachPerDay?: number;
+}
+
+export async function updateOutreachSettings(
+  userId: string,
+  patch: OutreachSettingsPatch,
+) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: patch,
+    select: { dryRun: true, sendMode: true, maxOutreachPerDay: true },
+  });
+}
+
 export interface ProfilePatch {
   candidateName?: string | null;
   candidateBackground?: string | null;
