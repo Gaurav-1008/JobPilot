@@ -1,7 +1,7 @@
 import { TailorFlow } from "@/components/tailor/TailorFlow";
 
 export const metadata = {
-  title: "Tailor · Resume Shapeshifter",
+  title: "Tailor · JobPilot",
 };
 
 export default function TailorPage() {
