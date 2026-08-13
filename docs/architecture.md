@@ -1101,6 +1101,10 @@ Two corrections to an earlier draft of this table, both found in [`edge-cases/ph
 
 Blocked outreach falls back to the deterministic template, exactly as the LLM validator already does. Same pattern, new domain.
 
+**How the scoping rule is actually implemented (P5.3.1).** The table above says these checks police claims about the *sender*. `lib/outreach/grounding.ts` enforces that with a **first-person requirement**: the body is split into sentences, and a skill or credential claim only counts when its sentence carries a first-person marker (`I`, `I've`, `my`, `me`). So "Your team works with Kubernetes" is research and passes, while "I have deep Kubernetes experience" is a claim and is verified against the resume corpus.
+
+This is the mechanism that closes EC-P5-35, and it is load-bearing: remove it and every company-research sentence starts tripping the skill check, which is the failure mode that gets a guardrail switched off in its first week. Relationship and referral patterns are *not* gated on first person — "Rahul suggested I reach out" must block regardless of phrasing — and they run against a name-stripped copy of the sentence so the greeting cannot trigger them (EC-P5-33).
+
 **On user edits (EC-P5-37).** Grounding runs on ④'s output. When the user edits the body at review, re-run the checks and **warn — do not block**. The user is the accountable author of their own email; the guardrail exists to stop the *model* fabricating on their behalf. What must not happen is skipping the re-check while the review screen still implies the content was verified.
 
 ---
