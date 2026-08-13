@@ -359,11 +359,20 @@ function SmtpForm({
 
   return (
     <section className="mt-10 border-t border-border pt-8">
-      <h2 className="text-sm font-medium">Sending account</h2>
+      {/* Named as the ALTERNATIVE it is. With two sections on one page, a
+          generic "Sending account" heading reads as a second thing you must
+          also fill in — and the two are mutually exclusive: one credential row
+          per user, so connecting SMTP replaces Google and vice versa. */}
+      <h2 className="text-sm font-medium">Or connect by SMTP instead</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        An alternative to Google, not an addition — you need one or the other.
+        SMTP sends immediately and cannot create drafts, so draft mode needs
+        Google.
+      </p>
 
       {credential ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          {credential.provider === "smtp" ? "SMTP" : "Google"} connected ·{" "}
+          Currently connected: {credential.provider === "smtp" ? "SMTP" : "Google"} ·{" "}
           {credential.preflightOk
             ? "connection check passed"
             : "connection check has not passed"}

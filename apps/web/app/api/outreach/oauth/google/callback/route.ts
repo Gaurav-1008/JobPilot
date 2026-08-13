@@ -62,12 +62,36 @@ export async function GET(request: Request) {
     const { userId } = await requireSession();
     const url = new URL(request.url);
 
-    // The user pressed Cancel, or unchecked everything on the consent screen.
+    /**
+     * `access_denied` covers two very different situations, and calling both
+     * "cancelled" sends the user looking for a button they never pressed.
+     *
+     *   - the person genuinely declined on the consent screen, or
+     *   - Google refused before showing it, because the consent screen is in
+     *     Testing and the signed-in account is not on the Test users list
+     *     (403 access_denied)
+     *
+     * The second is overwhelmingly the common one during development, and the
+     * fix is in Google Cloud Console rather than anywhere in this app — so the
+     * message has to name it, or the next twenty minutes are spent re-clicking
+     * a button that will keep failing.
+     *
+     * Note this handler often will not run at all for the Testing case: Google
+     * blocks on its own domain and never redirects back. It fires when Google
+     * does redirect, which is why both readings are offered rather than one
+     * guessed.
+     */
     const denied = url.searchParams.get("error");
     if (denied) {
       return back(request, {
         google: "cancelled",
-        message: "Google authorization was cancelled. Nothing changed.",
+        message:
+          denied === "access_denied"
+            ? "Google did not authorize the connection. If you did not press " +
+              "Cancel, the Google account you chose is probably not on the " +
+              "Test users list for this OAuth consent screen — add it in " +
+              "Google Cloud Console, then try again."
+            : `Google returned an error (${denied}). Nothing changed.`,
       });
     }
 
