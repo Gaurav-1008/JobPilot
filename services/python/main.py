@@ -19,9 +19,14 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from routers import boards, hydrate
+# NOT `routers/email.py`: that filename shadows the stdlib `email` package for
+# any tool that puts routers/ on sys.path (pytest rootdir configs do), and
+# FastAPI imports `email.message` internally — so the collision surfaces as a
+# circular-import error inside FastAPI rather than anywhere near this line.
+from routers import boards, delivery, hydrate, outreach_email
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -95,5 +100,41 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.exception_handler(RequestValidationError)
+async def redacted_validation_handler(request: Request, exc: RequestValidationError):
+    """
+    P5.5.5 / EC-P5-61 — NEVER echo the request body.
+
+    FastAPI's default 422 includes an `input` field carrying the offending
+    value. On /email/deliver and /email/preflight that value is an SMTP app
+    password or a Google access token, and ① logs the response body it gets
+    back — so the default behavior writes a live credential into two log files
+    at once.
+
+    Only the field LOCATION and the error type survive here. That is enough to
+    debug a schema mismatch and never enough to leak a secret. ① redacts on its
+    side too (lib/outreach/worker-client.ts); a credential leaks from whichever
+    side forgets, so both must.
+    """
+    safe = [
+        {"loc": [str(part) for part in error.get("loc", [])], "type": error.get("type")}
+        for error in exc.errors()
+    ]
+    log.warning("validation error on %s: %s", request.url.path, safe)
+    return JSONResponse({"detail": safe}, status_code=422)
+
+
+@app.exception_handler(Exception)
+async def redacted_exception_handler(request: Request, exc: Exception):
+    """
+    Same reasoning for unhandled errors: a traceback rendered into a response
+    can carry local variables, and on the delivery routes those are credentials.
+    """
+    log.error("unhandled error on %s: %s", request.url.path, type(exc).__name__)
+    return JSONResponse({"detail": "internal error"}, status_code=500)
+
+
 app.include_router(boards.router)
 app.include_router(hydrate.router)
+app.include_router(outreach_email.router)
+app.include_router(delivery.router)
