@@ -71,16 +71,40 @@ export default function OutreachPage() {
             Add a contact you already have. JobPilot does not look people up.
           </p>
         </div>
-        <Link href="/opt-out" className="text-sm underline whitespace-nowrap">
-          Opt-out list
-        </Link>
+        {/* Both live here rather than only in the header: they are outreach
+            concerns, and sending settings in particular has to be reachable
+            BEFORE there is anything to send — connecting an account is a
+            prerequisite, not a follow-up. */}
+        <div className="flex shrink-0 gap-4 whitespace-nowrap text-sm">
+          <Link href="/outreach/settings" className="underline">
+            Sending settings
+          </Link>
+          <Link href="/opt-out" className="underline">
+            Opt-out list
+          </Link>
+        </div>
       </div>
 
       {rows.length === 0 && (
-        <p className="mt-8 rounded border border-border bg-card p-4 text-sm text-muted-foreground">
-          No applications yet. Tailor a resume for a job first — outreach is
-          seeded from that tailoring run.
-        </p>
+        <div className="mt-8 rounded border border-border bg-card p-4 text-sm text-muted-foreground">
+          <p>
+            No applications yet. Tailor a resume for a job first — outreach is
+            seeded from that tailoring run, so the email can cite real evidence
+            instead of a generic template.
+          </p>
+          {/* An empty state that only says "nothing here" makes the user guess
+              what to do next. Both next steps are one click from here. */}
+          <p className="mt-3">
+            <Link href="/jobs" className="underline">
+              Pick a job to tailor
+            </Link>
+            {" · or "}
+            <Link href="/outreach/settings" className="underline">
+              connect a sending account
+            </Link>{" "}
+            while you are here.
+          </p>
+        </div>
       )}
 
       <ul className="mt-8 space-y-3">
