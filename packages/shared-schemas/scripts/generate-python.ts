@@ -38,6 +38,29 @@ const OUT = join(HERE, "..", "generated", "models.py");
 /** Pinned so regeneration is reproducible (EC-P0-15). */
 const CODEGEN_PIN = "datamodel-code-generator==0.26.3";
 
+/**
+ * The interpreter that actually has the generator.
+ *
+ * This was a bare "python3", which meant the drift gate could not run on a
+ * correctly-configured machine. The repo installs its Python tooling into
+ * `.venv` — the error message below says exactly that — while `python3`
+ * resolves to whatever is first on PATH, here Homebrew's 3.14. So the script
+ * told you to install into a location it then refused to look in, and
+ * `npm run schemas:check` failed with "No module named
+ * datamodel_code_generator" against a tree that was perfectly in sync.
+ *
+ * That is the worst failure mode a drift gate can have. It cries wolf, people
+ * stop believing it, and then a REAL desync between Zod and ④ sails through —
+ * which is the entire thing EC-P0-15 is worried about.
+ *
+ * Prefer the repo venv; fall back to PATH so CI, which installs into the job's
+ * own interpreter, keeps working unchanged.
+ */
+function codegenPython(): string {
+  const venv = join(HERE, "..", "..", "..", ".venv", "bin", "python");
+  return existsSync(venv) ? venv : "python3";
+}
+
 const HEADER = `# ============================================================================
 # GENERATED FILE — DO NOT EDIT BY HAND.
 #
@@ -194,7 +217,7 @@ function generate(): string {
 
   try {
     execFileSync(
-      "python3",
+      codegenPython(),
       [
         "-m", "datamodel_code_generator",
         "--input", schemaPath,
@@ -211,8 +234,14 @@ function generate(): string {
     return HEADER + readFileSync(outPath, "utf8");
   } catch (err) {
     throw new Error(
-      `datamodel-code-generator failed. Install it with the pinned version:\n` +
-        `  .venv/bin/python -m pip install ${CODEGEN_PIN}\n\n` +
+      `datamodel-code-generator failed.\n` +
+        // Name the interpreter that was actually tried. Without it, the advice
+        // below is unfalsifiable: the previous version of this message told
+        // people to install into .venv while silently running a different
+        // python, so following the instructions exactly did not fix anything.
+        `  interpreter: ${codegenPython()}\n` +
+        `  install it there with:\n` +
+        `    ${codegenPython()} -m pip install ${CODEGEN_PIN}\n\n` +
         String((err as { stderr?: Buffer }).stderr ?? err),
     );
   } finally {
