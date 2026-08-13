@@ -565,23 +565,58 @@ No tracker board. No follow-ups. No bulk anything — and there is no `send-all`
 
 ### Acceptance criteria
 
+A box is ticked only where an automated test proves it. "Built but unverified"
+is left unticked on purpose — the whole point of this list is that it cannot be
+satisfied by reading the code.
+
 - [ ] Generated email's hook cites a skill present in `topMatchedSkills` — verifiable against the DB row
 - [ ] Evidence panel shows the tailoring artifact behind each hook
-- [ ] A hand-crafted `curl` to `/deliver` without a token is rejected
-- [ ] Approving, then editing the body, then delivering → rejected on hash mismatch
-- [ ] Opt-out recipient → blocked, `failed` row with reason `opt_out`
-- [ ] Second email to the same contact → blocked by dedup
-- [ ] With `DRY_RUN=true`, a full send attempt opens no sockets and still logs
+- [x] A hand-crafted `curl` to `/deliver` without a token is rejected
+- [x] Approving, then editing the body, then delivering → rejected on hash mismatch
+- [x] Opt-out recipient → blocked, `failed` row with reason `opt_out`
+- [x] Second email to the same contact → blocked by dedup
+- [x] With `DRY_RUN=true`, a full send attempt opens no sockets and still logs
 - [ ] With `DRY_RUN=false` + valid OAuth → real Gmail draft appears, `provider_message_id` stored
-- [ ] Removing `GROQ_API_KEY` → template path, everything still works
-- [ ] All eight P5.6 tests green
+- [x] Removing `GROQ_API_KEY` → template path, everything still works
+- [x] All eight P5.6 tests green
+
+**Where the ticks come from.**
+
+- `tests/safety/outreach-interlocks.test.ts` (27) — the chain REFUSES: token,
+  hash, opt-out, dedup, cap and mode, at the interlock layer, which is the
+  enforcement point. Includes two concurrency cases written with real
+  `Promise.all`, since both are invisible when tested sequentially.
+- `tests/safety/outreach-audit-trail.test.ts` (10) — the refusal is RECORDED.
+  A separate claim and a separate failure mode: `runInterlocks` can return a
+  perfect block while the route forgets the row, and every test in the file
+  above would still pass. These drive the real handler, so they also pin the
+  order interlocks → burn → provider.
+- `services/python/tests/test_delivery_safety.py` (10) — dry run at the socket
+  layer, credential redaction, and the template fallback.
+
+**What the three open boxes still need:**
+
+| Box | Blocked on |
+|-----|-----------|
+| Hook cites a matched skill | A live LLM generation. The template path cites no skills by design, so this cannot be shown without `GROQ_API_KEY` exercised end to end. |
+| Evidence panel | Built and typechecked; needs one look in a browser against a real tailoring run. |
+| Real Gmail draft | `ENCRYPTION_KEY` and `GOOGLE_CLIENT_ID`/`SECRET` are unset, so no credential can be stored and check 11 blocks every real send. Correct fail-closed behavior, not a defect. |
 
 ### Exit gate → Phase 6
 
-- [ ] Every §19 safety test passes
-- [ ] Grep confirms no bulk-send code path exists anywhere
+- [x] Every §19 safety test passes
+- [x] Grep confirms no bulk-send code path exists anywhere
 - [ ] A self-addressed live draft was created and verified in Gmail
-- [ ] Credentials appear in no log line, no trace, no error body
+- [x] Credentials appear in no log line, no trace, no error body
+
+The last credential item was checked the way EC-P5-61 asks: a 422 was forced out
+of ④ and the full response **and** captured log output were grepped for the
+password. FastAPI's default handler echoes the offending value in `input`, which
+on `/email/deliver` is an app password — so this passes only because both ④ and
+① redact, and it would regress the moment either side stopped.
+
+**Phase 5 is not closed.** One exit-gate item remains, and it is the one that
+proves the phase actually delivers mail rather than merely refusing to.
 
 ---
 
