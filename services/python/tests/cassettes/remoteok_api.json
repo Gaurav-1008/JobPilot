@@ -1,0 +1,45 @@
+[
+  {
+    "legal": "RemoteOK API — attribution required. This first element is a legal notice, NOT a job. boards/remoteok.py skips it with items[1:]; a cassette without it would let a regression that stopped skipping go unnoticed."
+  },
+  {
+    "id": "1000001",
+    "company": "Acme Analytics",
+    "position": "AI Engineer",
+    "tags": ["ai", "python", "llm"],
+    "location": "Worldwide",
+    "date": "2026-08-01T09:00:00+00:00",
+    "url": "/remote-jobs/1000001-ai-engineer-acme-analytics",
+    "description": "<p>Build <strong>retrieval</strong> pipelines.</p><ul><li>Python</li><li>Postgres</li></ul>"
+  },
+  {
+    "id": "1000002",
+    "company": "Northwind Labs",
+    "position": "Senior AI Engineer",
+    "tags": ["ai", "ml"],
+    "location": "",
+    "date": "2026-07-30T09:00:00+00:00",
+    "url": "https://remoteok.com/remote-jobs/1000002-senior-ai-engineer-northwind-labs",
+    "description": "Own model training &amp; deployment."
+  },
+  {
+    "id": "1000003",
+    "company": "Contoso Systems",
+    "position": "Platform Engineer",
+    "tags": ["ai", "kubernetes"],
+    "location": "Europe",
+    "date": "2026-07-28T09:00:00+00:00",
+    "url": "/remote-jobs/1000003-platform-engineer-contoso-systems",
+    "description": "Run the AI platform. Kubernetes, Terraform."
+  },
+  {
+    "id": "1000004",
+    "company": "Fabrikam",
+    "position": "Technical Writer",
+    "tags": ["docs", "writing"],
+    "location": "Remote",
+    "date": "2026-07-25T09:00:00+00:00",
+    "url": "/remote-jobs/1000004-technical-writer-fabrikam",
+    "description": "Document the product. No engineering required."
+  }
+]

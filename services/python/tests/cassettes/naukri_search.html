@@ -1,0 +1,85 @@
+<!doctype html>
+<!--
+  Naukri search results — current markup (div.srp-jobtuple-wrapper).
+
+  Hand-authored to the selector contract in boards/naukri.py; see README.md.
+  Four cards, each exercising something different:
+
+    1. complete card, relative href           -> full mapping + urljoin
+    2. absolute href, extra whitespace         -> href passthrough + get_text strip
+    3. optional fields absent                  -> empty strings, never None
+    4. no title anchor                         -> card skipped entirely
+-->
+<html lang="en">
+<head><title>ai engineer jobs in bengaluru</title></head>
+<body>
+<div class="styles_job-listing-container__OCfZC">
+
+  <!-- 1. complete card, relative link -->
+  <div class="srp-jobtuple-wrapper">
+    <div class="row1">
+      <h2><a class="title" href="/job-listings-ai-engineer-acme-bengaluru-3-to-6-years-010125000001">
+        AI Engineer
+      </a></h2>
+    </div>
+    <div class="row2">
+      <span class="comp-dtls-wrap">
+        <a class="comp-name" href="/acme-jobs-careers-000111">Acme Analytics</a>
+      </span>
+    </div>
+    <div class="row3">
+      <span class="locWdth" title="Bengaluru">Bengaluru</span>
+    </div>
+    <div class="row4">
+      <span class="job-desc">Build and ship retrieval pipelines and evaluation harnesses for production LLM features.</span>
+    </div>
+    <div class="row6">
+      <span class="job-post-day">3 Days Ago</span>
+    </div>
+  </div>
+
+  <!-- 2. absolute link, ragged whitespace inside the tags -->
+  <div class="srp-jobtuple-wrapper">
+    <div class="row1">
+      <h2><a class="title" href="https://www.naukri.com/job-listings-senior-ml-engineer-northwind-bengaluru-020225000002">
+          Senior   Machine Learning
+          Engineer
+      </a></h2>
+    </div>
+    <div class="row2">
+      <span class="comp-dtls-wrap">
+        <a class="comp-name" href="/northwind-jobs-careers-000222">
+          Northwind   Labs
+        </a>
+      </span>
+    </div>
+    <div class="row3">
+      <span class="locWdth" title="Bengaluru, Hybrid">Bengaluru, Hybrid</span>
+    </div>
+    <div class="row4">
+      <span class="job-desc">Own model training and deployment for ranking systems.</span>
+    </div>
+    <div class="row6">
+      <span class="job-post-day">Just Now</span>
+    </div>
+  </div>
+
+  <!-- 3. company / location / description / date all missing -->
+  <div class="srp-jobtuple-wrapper">
+    <div class="row1">
+      <h2><a class="title" href="/job-listings-data-engineer-stealth-030325000003">Data Engineer</a></h2>
+    </div>
+  </div>
+
+  <!-- 4. promo tile with no title anchor: must be dropped, not crash -->
+  <div class="srp-jobtuple-wrapper">
+    <div class="row2">
+      <span class="comp-dtls-wrap">
+        <a class="comp-name" href="/sponsored-000999">Sponsored Placement</a>
+      </span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<!--
+  Naukri search results — the OLDER markup.
+
+  boards/naukri.py carries a fallback for each selector:
+
+      div.srp-jobtuple-wrapper  ->  div.cust-job-tuple
+      h2 a.title                ->  h2 a[href]
+      a.comp-name               ->  .comp-dtls-wrap a[href*='jobs-careers']
+      .locWdth                  ->  .loc-wrap span[title]
+
+  Fallbacks rot silently: nothing exercises them until the primary selector
+  stops matching, which is the worst possible moment to discover they were
+  broken. This cassette uses ONLY the fallback shapes, so both paths stay live.
+-->
+<html lang="en">
+<head><title>ai engineer jobs in bengaluru</title></head>
+<body>
+<div class="list">
+
+  <div class="cust-job-tuple">
+    <h2><a href="/job-listings-ai-engineer-contoso-bengaluru-040425000004">AI Engineer</a></h2>
+    <div class="comp-dtls-wrap">
+      <a href="/contoso-jobs-careers-000333">Contoso Systems</a>
+    </div>
+    <div class="loc-wrap">
+      <span title="Bengaluru">Bengaluru</span>
+    </div>
+    <span class="job-desc">Applied research on multimodal retrieval.</span>
+    <span class="job-post-day">1 Day Ago</span>
+  </div>
+
+  <div class="cust-job-tuple">
+    <h2><a href="/job-listings-nlp-engineer-fabrikam-bengaluru-050525000005">NLP Engineer</a></h2>
+    <div class="comp-dtls-wrap">
+      <a href="/fabrikam-jobs-careers-000444">Fabrikam</a>
+    </div>
+    <div class="loc-wrap">
+      <span title="Bengaluru">Bengaluru</span>
+    </div>
+    <span class="job-desc">Fine-tuning and evaluation for support automation.</span>
+    <span class="job-post-day">5 Days Ago</span>
+  </div>
+
+</div>
+</body>
+</html>
