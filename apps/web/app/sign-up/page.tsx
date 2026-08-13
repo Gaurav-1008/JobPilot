@@ -20,11 +20,45 @@ export default function SignUpPage() {
       body: JSON.stringify({ email, password }),
     });
     const data = await res.json().catch(() => ({}));
-    setBusy(false);
     if (!res.ok) {
+      setBusy(false);
       setError(data.message ?? "Sign up failed.");
       return;
     }
+
+    /**
+     * EC-P1-43, corrected.
+     *
+     * This screen used to say "check your email" unconditionally, on the
+     * assumption that the project had `mailer_autoconfirm=false`. That setting
+     * lives in the Supabase dashboard, not in this repo, and it is currently
+     * ON — so no mail is sent, the account already works, and the old copy sent
+     * people off to watch an inbox forever.
+     *
+     * The server now reports which case actually happened. When the account is
+     * live immediately there is nothing to confirm, so sign straight in rather
+     * than making the user retype the credentials they just chose.
+     */
+    if (!data.needsConfirmation) {
+      const signIn = await fetch("/api/auth/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      setBusy(false);
+      if (signIn.ok) {
+        // Full navigation, not router.push: the session cookie was just set and
+        // every server component needs to re-render with it.
+        window.location.href = "/jobs";
+        return;
+      }
+      // Account exists but auto sign-in failed — send them to sign in by hand
+      // rather than showing a confirmation screen that does not apply.
+      setError("Account created. Please sign in.");
+      return;
+    }
+
+    setBusy(false);
     setDone(true);
   }
 
@@ -32,9 +66,6 @@ export default function SignUpPage() {
     return (
       <main className="mx-auto max-w-sm px-6 py-16">
         <h1 className="text-2xl font-semibold">Check your email</h1>
-        {/* EC-P1-43: this project has mailer_autoconfirm=false, so a real
-            confirmation email is sent and sign-in fails until it is clicked.
-            Saying so beats letting the user think sign-up silently failed. */}
         <p className="mt-4 text-sm text-neutral-600">
           We sent a confirmation link. You need to click it before you can sign in.
         </p>
