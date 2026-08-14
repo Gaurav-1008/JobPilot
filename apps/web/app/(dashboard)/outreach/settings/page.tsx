@@ -159,6 +159,19 @@ function SettingsScreen() {
           <span className="mt-1 block text-xs text-muted-foreground">
             Drafts are the safer default and need a connected Google account.
           </span>
+          {/* The one combination that can never work. Saying so here beats
+              discovering it as a `failed` row after approving an email —
+              interlock check 12 refuses it every time, correctly, but silently
+              from the user's side. */}
+          {settings.sendMode === "send" && credential && !credential.canSend && (
+            <span className="mt-2 block rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900">
+              Your Google account is authorized for <strong>drafts only</strong>,
+              so nothing will send while this says “Send immediately” — every
+              attempt is refused at the last check. Either switch this back to
+              “Create a draft I press send on”, or use{" "}
+              <strong>Add sending access</strong> below to re-authorize.
+            </span>
+          )}
         </label>
 
         <label className="block">

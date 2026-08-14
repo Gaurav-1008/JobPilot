@@ -81,6 +81,22 @@ export async function PATCH(request: Request) {
     // EC-P5-65: switching to 'send' with a drafts-only grant would be caught by
     // interlock check 12 at delivery — but only after the user believed it was
     // configured. Refusing here turns a late failure into an early answer.
+    /**
+     * Escalating to 'send' with NO credential at all used to be allowed, because
+     * the guard below is gated on `credential` being present. That left a real
+     * trap: set 'send' first, connect a drafts-only Google account afterwards,
+     * and the account sits in a combination that interlock check 12 refuses
+     * forever — with the refusal only visible as a failed row after approving.
+     *
+     * Exactly that happened here. Gate the escalation itself, not just the
+     * escalation-with-a-credential case.
+     */
+    if (patch.sendMode === "send" && !credential) {
+      throw new BadRequestError(
+        "Connect a sending account before choosing to send directly.",
+      );
+    }
+
     if (patch.sendMode === "send" && credential && !credential.canSend) {
       throw new BadRequestError(
         "Your connected account is authorized for drafts only. " +
