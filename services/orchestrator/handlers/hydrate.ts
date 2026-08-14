@@ -106,12 +106,32 @@ export async function handleHydrateJob(deps: HydrateDeps, data: HydrateJob): Pro
   let profile: unknown;
   try {
     profile = await deps.extractProfile(rawText);
-  } catch {
-    // Text is safe on disk; leave the job pending so extraction can retry.
+  } catch (err) {
+    /**
+     * Text is safe on disk; leave the job pending so extraction can retry.
+     *
+     * The reason is LOGGED rather than swallowed. This `catch` used to discard
+     * the error entirely, and the cost showed up immediately: 93 jobs sat at
+     * `pending` while the queue reported nothing but `job.completed`, because
+     * a completed job that quietly reset its own status looks identical to a
+     * successful one from the outside. Diagnosing it meant re-running the
+     * extraction by hand to discover the answer was a Groq rate limit.
+     *
+     * "Retryable" is not the same as "uninteresting". A rate limit, a truncated
+     * completion and a malformed response all land here and all want different
+     * responses from a human — wait, re-fetch, or investigate the page.
+     */
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(JSON.stringify({
+      event: "hydrate.extraction_failed",
+      jobId,
+      rawTextChars: rawText.length,
+      reason,
+    }));
     await deps.prisma.job.update({
       where: { id: jobId }, data: { hydrationStatus: "pending" },
     });
-    await publish(deps, jobId, "pending", "extraction_failed");
+    await publish(deps, jobId, "pending", `extraction_failed: ${reason.slice(0, 120)}`);
     return;
   }
 
