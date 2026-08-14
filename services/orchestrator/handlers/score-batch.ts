@@ -16,6 +16,7 @@ import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
 
 import { scoreTier0, DEFAULT_TIER0_FLOOR } from "../../../apps/web/lib/scoring/tier0";
+import { userStillExists } from "./harvest";
 import {
   buildScoringPrompt,
   summariseResumeForScoring,
@@ -198,6 +199,22 @@ export async function handleScoreBatch(
       // them is a graceful degradation rather than a loss.
       continue;
     }
+
+    /**
+     * EC-P7-24 — the account may have been deleted during this batch.
+     *
+     * Batch scoring is the longest-running job in the system: twenty jobs is
+     * minutes of LLM work (P4.3.1), and it is exactly the job a frustrated user
+     * is most likely to abandon by deleting their account. Every write below is
+     * keyed on `userId`, so the cascade turns them into foreign-key violations
+     * and BullMQ retries the whole batch — paying for the same tokens again on
+     * behalf of nobody.
+     *
+     * Checked once per batch rather than per row: a batch is the granularity at
+     * which the work is already grouped, and a per-row check would add a query
+     * per job to save at most a few seconds of writes.
+     */
+    if (!(await userStillExists(deps, userId))) return;
 
     for (const r of results) {
       const t0 = tier0ByJob.get(r.jobId);

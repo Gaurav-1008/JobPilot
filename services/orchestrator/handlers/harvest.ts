@@ -41,6 +41,27 @@ export interface Deps {
 
 type BoardStatus = "ok" | "partial" | "failed";
 
+/**
+ * Is the user still there? (EC-P7-24)
+ *
+ * Cheap enough to call between the steps of a long job, which is the point: a
+ * harvest runs for minutes and a deletion can land anywhere inside that window,
+ * so checking once at the start proves nothing about the moment of the write.
+ *
+ * Shared by the harvest and hydrate handlers — both write rows keyed on a user
+ * that may have stopped existing since the job was queued.
+ */
+export async function userStillExists(
+  deps: Pick<Deps, "prisma">,
+  userId: string,
+): Promise<boolean> {
+  const hit = await deps.prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  return hit !== null;
+}
+
 async function setBoardResult(
   deps: Deps, runId: string, board: string,
   result: { status: BoardStatus; count: number; reason: string | null; responseBytes: number | null },
@@ -147,6 +168,27 @@ export async function handleHarvestBoard(deps: Deps, data: HarvestBoardJob): Pro
   }
 
   await deps.breaker.recordSuccess(board);
+
+  /**
+   * EC-P7-24 — the account may have been deleted while this board was running.
+   *
+   * Deleting an account mid-harvest is not exotic; it is what an angry user
+   * does, and the harvest they started is still in flight with their id sitting
+   * in a Redis payload the cascade has no way to reach.
+   *
+   * The check goes HERE rather than at the top of the handler, because this is
+   * where it earns anything. The gap that matters is the board call above — it
+   * takes seconds to tens of seconds, and a check performed before it says
+   * nothing about whether the user still exists after it. This is the last
+   * moment before the writes.
+   *
+   * Without it every insert below fails on a missing foreign key, BullMQ reads
+   * the throw as a transient fault, and the job retries — re-scraping a live
+   * job board on behalf of somebody who deleted their account. A no-op return
+   * is the correct outcome: there is nobody left to write for, and nobody to
+   * report to.
+   */
+  if (!(await userStillExists(deps, userId))) return;
 
   // Persist. EC-P2-29: the upsert is what makes a retry idempotent — the
   // deterministic job id prevents duplicate *work*, this prevents duplicate

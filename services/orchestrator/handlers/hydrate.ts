@@ -10,6 +10,7 @@ import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
 
 import { urlHash } from "../lib/url-normalize";
+import { userStillExists } from "./harvest";
 
 export interface HydrateDeps {
   prisma: PrismaClient;
@@ -94,6 +95,24 @@ export async function handleHydrateJob(deps: HydrateDeps, data: HydrateJob): Pro
       create: { urlHash: hash, url: job.link, rawText, method },
     });
   }
+
+  /**
+   * EC-P7-24 — the account may have been deleted during the fetch.
+   *
+   * The job row was checked at the top of this handler, but the fetch above
+   * takes seconds to tens of seconds and the cascade can land anywhere in that
+   * window. If it did, the `jobs` row is gone and the upsert below fails on a
+   * missing foreign key — which BullMQ reads as transient and retries,
+   * re-fetching a job board for an account that no longer exists.
+   *
+   * Note what is deliberately NOT guarded: the `jd_cache` write above. That
+   * table is global rather than tenant-scoped (EC-P3-02 — entries are never
+   * evicted, because an evicted entry is a JD we can no longer read), and the
+   * text came from a public posting. Keeping it is right even when the user who
+   * triggered the fetch is gone: it spares the source site a repeat request
+   * from the next person who opens the same posting.
+   */
+  if (!(await userStillExists(deps, userId))) return;
 
   // EC-P3-40/41 — persist raw_text BEFORE extraction. If the LLM is down, the
   // fetched text must survive so extraction can be retried without re-fetching.

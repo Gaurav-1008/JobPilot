@@ -336,3 +336,27 @@ model SenderCredential {
 
   @@map("sender_credentials")
 }
+
+/// P7.4.5 / EC-P7-25 — the object-storage half of account deletion.
+///
+/// Written in the same transaction as the user cascade, drained afterwards.
+/// Deleting rows first orphans the objects with nothing left to enumerate them;
+/// deleting objects first can leave a live user with no files. The worklist
+/// makes the operation replayable instead of atomic, which is the achievable
+/// property across two stores.
+///
+/// NO RELATION TO User — deliberately. This table exists to outlive the user
+/// row, and a foreign key would cascade the worklist away at exactly the moment
+/// it becomes the only record of what still needs deleting.
+model PendingObjectDeletion {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  objectKey   String    @unique @map("object_key")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+  lastTriedAt DateTime? @map("last_tried_at") @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("pending_object_deletions")
+}
