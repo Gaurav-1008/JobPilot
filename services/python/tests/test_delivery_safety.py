@@ -13,6 +13,7 @@ trusting `mode == "dry_run"` to have been honored.
 
 from __future__ import annotations
 
+import os
 import socket
 import sys
 from pathlib import Path
@@ -30,7 +31,22 @@ SECRET = "hunter2SuperSecretAppPassword"
 
 @pytest.fixture(name="client")
 def _client() -> TestClient:
-    return TestClient(app, raise_server_exceptions=False)
+    """
+    A client that carries the service token, when one is configured.
+
+    main.py now loads the repo `.env`, so WORKER_SERVICE_TOKEN is usually set
+    and the middleware enforces it — as it always intended to. These tests
+    exercise the HANDLERS, not the gate, so they authenticate rather than
+    disable it: sending the real header keeps the auth middleware in the path
+    (a regression that broke it would still surface) without every assertion
+    turning into a 403.
+
+    Falls back to no header when no token is configured, which is the valid
+    local setup outside production.
+    """
+    token = os.getenv("WORKER_SERVICE_TOKEN", "")
+    headers = {"x-service-token": token} if token else {}
+    return TestClient(app, raise_server_exceptions=False, headers=headers)
 
 
 def _credentials() -> dict:
