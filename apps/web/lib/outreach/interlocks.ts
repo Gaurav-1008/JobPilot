@@ -31,6 +31,7 @@ import { loadGroundingContext } from "@/lib/outreach/review-context";
 import { normalizeEmail } from "@/lib/outreach/email-address";
 import { grantAllowsSend } from "@/lib/outreach/google-oauth";
 import { buildPayload } from "@/lib/outreach/personalization";
+import { platformForcesDryRun } from "@/lib/outreach/send-policy";
 
 export type InterlockCheck =
   | "authz"
@@ -237,7 +238,20 @@ export async function runInterlocks(
     // Deliberately LATE (EC-P5-58): a dry run has now exercised checks 1-9, so
     // testing the pipeline tests the real path rather than a shortcut. This is
     // not a block — it resolves the mode, and delivery simulates and logs.
-    if (profile.dryRun) {
+    //
+    // EC-P7-23 — the PLATFORM decides first, and the user row cannot promote
+    // that decision. `platformForcesDryRun()` reads the environment only; it
+    // never touches `profile`. That is the whole point: a staging user with
+    // `dry_run = false` — set by a seed script, a settings page, or somebody at
+    // a psql prompt — still cannot send. The user row may only ever be MORE
+    // conservative than the platform, never less.
+    //
+    // Note the position. This sits at check 10 rather than at the top of the
+    // chain, so a staging run still exercises checks 1-9 and remains a real
+    // test of the pipeline (EC-P5-58). Hoisting it would make staging test a
+    // different code path than production, which is the failure this ordering
+    // was written to avoid.
+    if (platformForcesDryRun() || profile.dryRun) {
       return {
         ok: true,
         mode: "dry_run",

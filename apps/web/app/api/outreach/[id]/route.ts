@@ -27,6 +27,7 @@ import { checkGrounding } from "@/lib/outreach/grounding";
 import { buildPayload } from "@/lib/outreach/personalization";
 import { loadGroundingContext } from "@/lib/outreach/review-context";
 import { displayEmail } from "@/lib/outreach/email-address";
+import { platformDryRunReason } from "@/lib/outreach/send-policy";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,16 @@ export async function GET(
       findings: grounding.findings,
       providerAttemptedAt: attempt.providerAttemptedAt?.toISOString() ?? null,
       errorMessage: attempt.errorMessage,
+      /**
+       * EC-P7-23 — told BEFORE writing and approving, not after.
+       *
+       * The platform override is invisible from the settings page, which shows
+       * the user's own `dry_run` switch. Someone on staging with that switch
+       * turned off would write, approve, and send, and only then learn that
+       * nothing was ever going to leave the building. Finding out at the end is
+       * what makes people stop believing the dry-run indicator entirely.
+       */
+      platformDryRunReason: platformDryRunReason(),
     });
   } catch (err) {
     return toErrorResponse(err);

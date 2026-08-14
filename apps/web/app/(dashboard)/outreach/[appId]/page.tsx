@@ -55,6 +55,7 @@ interface Draft {
   findings: Finding[];
   providerAttemptedAt: string | null;
   errorMessage: string | null;
+  platformDryRunReason: string | null;
 }
 
 export default function ReviewPage({
@@ -291,9 +292,55 @@ export default function ReviewPage({
 
       {draft && (
         <>
+          {/*
+           * ══════════════════════════════════════════════════════════════
+           * EC-P7-07 / P7.1.7 — THE WARNINGS ARE PART OF THE SAFETY GATE.
+           *
+           * This screen is the human gate (§14.1). If the approve control is
+           * reachable but the warnings are not perceivable, then for that user
+           * the gate does not exist — it is decorative, and they are approving
+           * an email whose problems the system found and did not tell them
+           * about. That is the same class of failure as EC-P5-56, arrived at
+           * from a different direction, which is why an accessibility item sits
+           * in a "polish" phase.
+           *
+           * Three properties, all required together:
+           *
+           *   1. DOM ORDER. Every warning precedes the approve control, so a
+           *      screen reader and a keyboard user reach the risk before the
+           *      action. This is the ordering property — it cannot be recovered
+           *      with CSS, because CSS does not move the focus order.
+           *   2. role="alert". Findings arrive asynchronously, after generation
+           *      returns. Without a live region, content that appears after
+           *      page load is silent: a sighted user sees a red panel appear,
+           *      and a screen-reader user gets nothing at all. `alert` is the
+           *      assertive role, correct here precisely because it interrupts —
+           *      this gates a decision the user is in the middle of making.
+           *   3. aria-describedby. Reaching Approve by keyboard announces the
+           *      warnings as part of the control's description, so the risk is
+           *      restated at the moment of the decision rather than only when
+           *      it first appeared.
+           * ══════════════════════════════════════════════════════════════
+           */}
+
+          {/* EC-P7-23 — the platform overrides the user's send setting, and
+              this is where that has to be said: before the work, not after. */}
+          {draft.platformDryRunReason && (
+            <section
+              role="status"
+              className="mt-6 rounded border border-sky-300 bg-sky-50 p-4 text-sm text-sky-900"
+            >
+              {draft.platformDryRunReason}
+            </section>
+          )}
+
           {/* ── Guardrail findings ───────────────────────────────────── */}
           {overLimit && (
-            <section className="mt-6 rounded border border-red-300 bg-red-50 p-4">
+            <section
+              id="warn-length"
+              role="alert"
+              className="mt-6 rounded border border-red-300 bg-red-50 p-4"
+            >
               <h2 className="text-sm font-medium text-red-900">
                 Too long to send — {draft.wordCount} words, limit {draft.wordLimit}
               </h2>
@@ -314,7 +361,11 @@ export default function ReviewPage({
           )}
 
           {blocking.length > 0 && (
-            <section className="mt-6 rounded border border-red-300 bg-red-50 p-4">
+            <section
+              id="warn-grounding"
+              role="alert"
+              className="mt-6 rounded border border-red-300 bg-red-50 p-4"
+            >
               <h2 className="text-sm font-medium text-red-900">
                 These claims are not supported by your resume
               </h2>
@@ -340,7 +391,14 @@ export default function ReviewPage({
           )}
 
           {flags.length > 0 && (
-            <section className="mt-4 rounded border border-amber-300 bg-amber-50 p-4">
+            /* role="status", not "alert": these are advisory, and an assertive
+               region for every soft flag would train the user to ignore the
+               region that carries the blocking ones. */
+            <section
+              id="warn-flags"
+              role="status"
+              className="mt-4 rounded border border-amber-300 bg-amber-50 p-4"
+            >
               <h2 className="text-sm font-medium text-amber-900">Worth checking</h2>
               <ul className="mt-2 space-y-1 text-sm text-amber-900">
                 {flags.map((f, i) => (
@@ -406,6 +464,35 @@ export default function ReviewPage({
               />
             </label>
 
+            {/*
+             * EC-P7-08 — RISK MUST BE VISIBLE WITHOUT SCROLLING, AT THE ACTION.
+             *
+             * The warning panels above are correct in DOM order, but on a phone
+             * a 14-row textarea sits between them and this button row, so by the
+             * time Approve is on screen the reasons not to press it are not.
+             * Ordering alone solves the screen-reader case and not the visual
+             * one.
+             *
+             * This restates the count immediately above the controls — it always
+             * travels with them — and links back to the detail rather than
+             * duplicating it, so there is still one place where the findings are
+             * written down.
+             */}
+            {(blocking.length > 0 || flags.length > 0 || overLimit) && (
+              <p className="mt-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <a href="#warn-grounding" className="font-medium underline">
+                  {overLimit && "Too long to send"}
+                  {overLimit && (blocking.length > 0 || flags.length > 0) && " · "}
+                  {blocking.length > 0 &&
+                    `${blocking.length} unsupported claim${blocking.length === 1 ? "" : "s"}`}
+                  {blocking.length > 0 && flags.length > 0 && " · "}
+                  {flags.length > 0 &&
+                    `${flags.length} thing${flags.length === 1 ? "" : "s"} worth checking`}
+                </a>{" "}
+                — details above.
+              </p>
+            )}
+
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 onClick={save}
@@ -417,14 +504,21 @@ export default function ReviewPage({
               <button
                 onClick={approve}
                 disabled={busy || dirty || approved || overLimit}
-                className="rounded border px-4 py-2 text-sm disabled:opacity-50"
+                /*
+                 * EC-P7-07 — the warnings are announced as this control's
+                 * description, so tabbing to Approve restates the risk at the
+                 * moment of the decision. Ids of absent panels are ignored by
+                 * assistive technology, so this needs no conditional logic.
+                 */
+                aria-describedby="warn-length warn-grounding warn-flags approve-hint"
+                className="rounded border px-4 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
               >
                 {approved ? "Approved" : "Approve"}
               </button>
               <button
                 onClick={deliver}
                 disabled={busy || !approved}
-                className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+                className="rounded bg-black px-4 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
               >
                 Send
               </button>
@@ -436,12 +530,22 @@ export default function ReviewPage({
                 Skip this one
               </button>
             </div>
-            {dirty && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Save your changes before approving — approval is bound to the
-                exact text.
-              </p>
-            )}
+
+            {/*
+             * Why Approve is unavailable, in text rather than only in an
+             * opacity change. A disabled control with no stated reason is the
+             * accessibility failure that also frustrates everyone else — the
+             * user cannot tell "not yet" from "broken".
+             */}
+            <p id="approve-hint" className="mt-2 text-xs text-muted-foreground">
+              {dirty
+                ? "Save your changes before approving — approval is bound to the exact text."
+                : overLimit
+                  ? "Approving is unavailable until the email is under the word limit."
+                  : approved
+                    ? "Approved. Send it before the approval expires."
+                    : "Approval is bound to the exact text shown above."}
+            </p>
           </section>
 
           <EvidencePanel payload={draft.payload} />

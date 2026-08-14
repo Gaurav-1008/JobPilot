@@ -19,7 +19,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { __counter, __resetMetrics } from "@/lib/obs/metrics";
 
@@ -495,6 +495,28 @@ describe("safety test 5 — the volume cap blocks at N+1", () => {
 });
 
 describe("safety test 7 — missing config defaults to dry-run and draft", () => {
+  /**
+   * Checks 11 and 12 are only REACHABLE in production (P7.4.3, EC-P7-23).
+   *
+   * The platform now forces dry-run everywhere except production, and that
+   * resolution happens at check 10 — deliberately, so a dry run still exercises
+   * checks 1-9 and stays a real test of the pipeline (EC-P5-58). The corollary
+   * is that checks 11 (credentials) and 12 (send mode) sit past the return, and
+   * a test that wants to assert their behaviour has to say it is production.
+   *
+   * That is not a workaround, it is the property under test in the neighbouring
+   * suite: outside production those checks CANNOT be reached, because delivery
+   * has already resolved to simulation. Setting the variable here makes the
+   * dependency explicit rather than letting these assertions quietly stop
+   * exercising anything.
+   */
+  const ENV = process.env.JOBPILOT_ENV;
+  beforeEach(() => { process.env.JOBPILOT_ENV = "production"; });
+  afterEach(() => {
+    if (ENV === undefined) delete process.env.JOBPILOT_ENV;
+    else process.env.JOBPILOT_ENV = ENV;
+  });
+
   it("resolves to dry_run when the user's defaults are untouched", async () => {
     const token = await approve();
     const result = await runInterlocks({ userId: ALICE, attemptId: ATTEMPT, token });
