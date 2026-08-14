@@ -131,15 +131,53 @@ export async function markJobsQueued(jobIds: string[], userId: string): Promise<
  *
  * EC-P3-05 — deliberately does NOT write jd_cache.
  */
-export async function saveManualJd(jobId: string, userId: string, rawText: string) {
+export async function saveManualJd(
+  jobId: string,
+  userId: string,
+  rawText: string,
+  /**
+   * The structured profile extracted from `rawText`.
+   *
+   * This used to always write `{}`, which made a pasted description a
+   * SECOND-CLASS JobDescription: the row existed and the job flipped to
+   * `hydrated`, but nothing downstream could read it. Requirements never
+   * rendered; `coverage()` over an empty `requiredSkills` returns 100% by its
+   * own empty-input rule, so scores were inflated; and `topMatchedSkills` came
+   * out empty, which silently degraded every outreach email built from a
+   * pasted job to the generic template.
+   *
+   * FR2's promise is that a paste is EQUIVALENT to a fetch, not a consolation
+   * prize — and equivalent means the same shape. The caller extracts a profile
+   * the same way the hydrate handler does and passes it here.
+   *
+   * Optional because extraction can fail (no LLM key, a rate limit), and a
+   * failed extraction must still keep the user's text. An empty profile is
+   * then honestly empty rather than silently wrong: the raw text survives and
+   * can be re-parsed later.
+   */
+  profile?: unknown,
+) {
   const job = await prisma.job.findFirst({ where: { id: jobId, userId }, select: { id: true } });
   if (!job) return null;
+
+  const stored = JSON.parse(JSON.stringify(profile ?? {}));
 
   return prisma.$transaction(async (tx) => {
     await tx.jobDescription.upsert({
       where: { jobId },
-      update: { rawText, extractionMethod: "manual_paste", profile: {} },
-      create: { jobId, rawText, extractionMethod: "manual_paste", profile: {} },
+      update: {
+        rawText,
+        extractionMethod: "manual_paste",
+        profile: stored,
+        extractedAt: new Date(),
+      },
+      create: {
+        jobId,
+        rawText,
+        extractionMethod: "manual_paste",
+        profile: stored,
+        extractedAt: new Date(),
+      },
     });
     return tx.job.update({
       where: { id: jobId },

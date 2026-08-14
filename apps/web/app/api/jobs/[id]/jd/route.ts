@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireSession } from "@/lib/auth/session";
 import { saveManualJd } from "@/lib/db/stores/harvest";
+import { parseJobDescription } from "@/services/jd-parser";
 import { sanitiseResumeText, UnreadableDocumentError } from "@/lib/resume-text";
 import { errorResponse, toErrorResponse, BadRequestError } from "@/lib/api-errors";
 
@@ -33,10 +34,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // empty/whitespace and runaway-length checks.
     const clean = sanitiseResumeText(parsed.data.text);
 
-    const result = await saveManualJd(id, userId, clean.text);
+    /**
+     * Extract the same structured profile hydration would have produced.
+     *
+     * Without this the paste was a second-class citizen: text stored, job
+     * marked `hydrated`, and an empty profile that made requirements vanish
+     * from the UI, inflated match scores (an empty `requiredSkills` scores
+     * 100% by `coverage()`'s own empty-input rule), and reduced every outreach
+     * email built from that job to the generic template. FR2 says a paste is
+     * equivalent to a fetch; equivalence is in the SHAPE, not just the row.
+     *
+     * A failure here is not fatal. The user's text is the thing that must
+     * survive — losing it to a rate limit is exactly the dead end this
+     * fallback exists to prevent — so the paste is saved either way and the
+     * caller is told the requirements could not be read.
+     */
+    let profile: unknown;
+    let parseWarning: string | null = null;
+    try {
+      profile = await parseJobDescription(clean.text);
+    } catch (err) {
+      parseWarning =
+        "Saved your text, but the requirements could not be read from it. " +
+        "Scoring and tailoring will be weaker until it is re-read.";
+      console.warn(
+        JSON.stringify({
+          event: "jd.manual_parse_failed",
+          jobId: id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+
+    const result = await saveManualJd(id, userId, clean.text, profile);
     if (!result) return errorResponse("Job not found.", "JOB_NOT_FOUND", 404);
 
-    return NextResponse.json({ ok: true, warnings: clean.warnings });
+    return NextResponse.json({
+      ok: true,
+      warnings: [...clean.warnings, ...(parseWarning ? [parseWarning] : [])],
+      parsed: profile !== undefined,
+    });
   } catch (err) {
     if (err instanceof UnreadableDocumentError) {
       return NextResponse.json(
