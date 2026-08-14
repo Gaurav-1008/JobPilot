@@ -43,6 +43,7 @@ const SOURCE_LABELS: Record<string, string> = {
 export default function OutreachPage() {
   const qc = useQueryClient();
   const [openApp, setOpenApp] = useState<string | null>(null);
+  const [sweepNotice, setSweepNotice] = useState<string | null>(null);
 
   const { data: apps, isPending } = useQuery<{ applications: AppRow[] }>({
     queryKey: ["applications"],
@@ -75,7 +76,11 @@ export default function OutreachPage() {
             concerns, and sending settings in particular has to be reachable
             BEFORE there is anything to send — connecting an account is a
             prerequisite, not a follow-up. */}
-        <div className="flex shrink-0 gap-4 whitespace-nowrap text-sm">
+        <div className="flex shrink-0 flex-wrap items-center gap-4 whitespace-nowrap text-sm">
+          {/* The sweep produces drafts that land in THIS queue, so the action
+              belongs here and not only on the tracker. It was tracker-only at
+              first, which put it on a screen the outreach flow never visits. */}
+          <FollowUpButton onDone={setSweepNotice} />
           <Link href="/outreach/settings" className="underline">
             Sending settings
           </Link>
@@ -84,6 +89,12 @@ export default function OutreachPage() {
           </Link>
         </div>
       </div>
+
+      {sweepNotice && (
+        <p role="status" className="mt-4 rounded border border-border bg-card p-3 text-sm">
+          {sweepNotice}
+        </p>
+      )}
 
       {rows.length === 0 && (
         <div className="mt-8 rounded border border-border bg-card p-4 text-sm text-muted-foreground">
@@ -154,6 +165,40 @@ export default function OutreachPage() {
         ))}
       </ul>
     </main>
+  );
+}
+
+/**
+ * Draft follow-ups for anything sent long enough ago (P6.2).
+ *
+ * Named for what it can actually do. EC-P6-12: nothing here reads an inbox, so
+ * the sweep cannot know whether anyone replied — only whether YOU recorded a
+ * reply. And it cannot send: it writes drafts into the same review queue, which
+ * traverse the same twelve interlocks as anything else.
+ */
+function FollowUpButton({ onDone }: { onDone: (message: string) => void }) {
+  const qc = useQueryClient();
+
+  const sweep = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/outreach/followups", { method: "POST" });
+      return res.json();
+    },
+    onSuccess: (body) => {
+      onDone(body.message ?? body.error ?? "Sweep finished.");
+      void qc.invalidateQueries({ queryKey: ["applications"] });
+    },
+  });
+
+  return (
+    <button
+      onClick={() => sweep.mutate()}
+      disabled={sweep.isPending}
+      className="underline disabled:opacity-50"
+      title="Drafts follow-ups for emails you sent over a week ago with no reply recorded. Never sends."
+    >
+      {sweep.isPending ? "Checking…" : "Draft follow-ups"}
+    </button>
   );
 }
 
