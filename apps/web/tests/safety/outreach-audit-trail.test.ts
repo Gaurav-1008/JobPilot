@@ -140,6 +140,33 @@ vi.mock("@/lib/db/client", () => {
       if (hit) hit.status = "drafted";
       return [];
     }
+
+    /**
+     * The status machine's conditional advance (P6.1.3).
+     *
+     * Modelled rather than stubbed: the rank comparison and the
+     * manual-terminal guard both live in the real SQL, so a fake that just set
+     * the status would let a regression in either rule pass. `rejected` must
+     * still be sticky here, exactly as in Postgres.
+     */
+    if (sql.includes("UPDATE applications")) {
+      const [target, id] = values as [string, string];
+      const app = db.applications.find((a) => a.id === id);
+      if (!app) return [];
+
+      const RANK: Record<string, number> = {
+        saved: 0, scored: 1, tailored: 2, contact_added: 3, emailed: 4,
+      };
+      const terminal = ["replied", "interviewing", "rejected", "closed"];
+      if (terminal.includes(app.status as string)) return [];
+
+      const current = RANK[app.status as string] ?? 99;
+      if (current >= (RANK[target] ?? 0)) return [];
+
+      app.status = target;
+      return [{ status: target }];
+    }
+
     return [];
   }
 

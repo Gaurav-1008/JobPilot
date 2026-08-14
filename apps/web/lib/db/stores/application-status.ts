@@ -9,19 +9,7 @@
  */
 
 import { prisma } from "../client";
-
-/** Funnel order. Anything at or past the target is left alone. */
-const RANK: Record<string, number> = {
-  saved: 0,
-  scored: 1,
-  tailored: 2,
-  contact_added: 3,
-  emailed: 4,
-  replied: 5,
-  interviewing: 6,
-  rejected: 7,
-  closed: 8,
-};
+import { advanceApplicationStatus } from "./tracker";
 
 /**
  * Advance the application behind an outreach attempt, never rewind it.
@@ -41,18 +29,10 @@ export async function prismaSafeUpdateApplication(
   });
   if (!attempt?.applicationId) return;
 
-  const application = await prisma.application.findFirst({
-    where: { id: attempt.applicationId, userId },
-    select: { id: true, status: true },
-  });
-  if (!application) return;
-
-  const current = RANK[application.status] ?? 0;
-  const next = RANK[target] ?? 0;
-  if (next <= current) return;
-
-  await prisma.application.update({
-    where: { id: application.id },
-    data: { status: target },
-  });
+  // Delegates rather than reimplementing. This file used to carry its own copy
+  // of the rank comparison, which was fine until P6.1.3 added a second rule —
+  // manual terminal statuses being sticky (EC-P6-01). Two copies of a status
+  // machine drift, and the drift shows up as a user's "rejected" being silently
+  // overwritten by a re-tailor.
+  await advanceApplicationStatus(attempt.applicationId, userId, target);
 }
