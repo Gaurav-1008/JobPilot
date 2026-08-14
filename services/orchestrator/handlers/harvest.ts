@@ -155,6 +155,58 @@ export async function handleHarvestBoard(deps: Deps, data: HarvestBoardJob): Pro
   for (const j of response.jobs) {
     const key = dedupeKey(j);
     try {
+      /**
+       * Same URL means same job, whatever the extracted fields say.
+       *
+       * `dedupeKey` is company|title|location and is deliberately tuned toward
+       * under-merging (EC-P2-17: showing a duplicate is safer than hiding a
+       * real job). That tradeoff assumes genuine ambiguity about whether two
+       * rows are the same posting. An identical URL removes the ambiguity.
+       *
+       * Observed on live data: one Wellfound harvest produced nine duplicated
+       * links, including the same posting stored under two different companies
+       * ("TaxBit" and "Expensive") because Firecrawl misaligned the company to
+       * the row. The keys differed, so both rows survived — and one of them was
+       * simply wrong about who is hiring.
+       *
+       * Deliberately NOT folded into `dedupeKey`: that value is stored on every
+       * existing row under a unique constraint, so changing how it is computed
+       * would make every prior job look new on the next harvest and duplicate
+       * the whole table. This is an additional guard, not a replacement key.
+       */
+      const seenByLink = j.link
+        ? await deps.prisma.job.findFirst({
+            where: { userId, link: j.link },
+            select: { id: true, company: true },
+          })
+        : null;
+
+      if (seenByLink) {
+        /**
+         * EC-P2-19 still applies: a job seen again updates lastSeenRunId while
+         * the original harvestRunId stays put.
+         *
+         * A PLACEHOLDER company is also healed here. Wellfound extractions
+         * sometimes yield "N/A" or "Not specified" where a later pass gets the
+         * real name, and without this the first bad value would be permanent —
+         * the link guard above means we never insert the better row.
+         *
+         * Only placeholders are overwritten. Replacing one real company with a
+         * different real company is the ambiguous case, and quietly picking a
+         * winner there would hide a genuine extraction disagreement.
+         */
+        const placeholder = /^\s*(n\/a|not specified|unknown|-)?\s*$/i;
+        const heal =
+          placeholder.test(seenByLink.company) && !placeholder.test(j.company);
+
+        await deps.prisma.job.update({
+          where: { id: seenByLink.id },
+          data: { lastSeenRunId: runId, ...(heal ? { company: j.company } : {}) },
+        });
+        written += 1;
+        continue;
+      }
+
       await deps.prisma.job.upsert({
         where: { userId_dedupeKey: { userId, dedupeKey: key } },
         // EC-P2-19: an existing job seen again updates lastSeenRunId. The
