@@ -92,8 +92,7 @@ graph TB
     RemoteOK["RemoteOK<br/><i>JSON API</i>"]
     Wellfound["Wellfound<br/><i>via Firecrawl</i>"]
     Firecrawl["Firecrawl<br/><i>structured extraction</i>"]
-    Groq["Groq<br/><i>parsing, scoring, tailoring</i>"]
-    Anthropic["Anthropic<br/><i>email rewrite (optional)</i>"]
+    Groq["Groq<br/><i>parsing, scoring, tailoring,<br/>email rewrite</i>"]
     Gmail["Gmail API / SMTP<br/><i>draft + send</i>"]
     Recipient["👤 Recipient<br/><i>recruiter / careers inbox</i>"]
 
@@ -105,7 +104,6 @@ graph TB
     JP --> Firecrawl
     Firecrawl --> Wellfound
     JP --> Groq
-    JP --> Anthropic
     JP -->|"only after explicit approval"| Gmail
     Gmail --> Recipient
 
@@ -1317,14 +1315,27 @@ Every external dependency, its failure, and where the user lands (P5).
 | Firecrawl quota | Wellfound + hydration | Playwright fallback; then manual paste |
 | Board blocks hydration | that job | `hydration_status='blocked'` → paste box (never a dead end) |
 | Groq down | scoring + tailoring | Tier-0 heuristic still ranks jobs; tailoring shows retry, run not lost |
+| Groq down or no key | email rewrite | **template fallback** 🟢 — outreach fully functional |
 | Groq returns invalid JSON twice | one run | typed error, retry button, nothing persisted half-formed |
-| Anthropic down / no key | email rewrite | **template fallback** 🟢 — outreach fully functional |
+| Per-user LLM quota exhausted | one scoring run | run stops and reports how far it got; Tier-0 scores persist for every job (EC-P7-14) |
 | SMTP/Gmail auth fails | delivery | preflight catches it before any send; `failed` row with a specific reason |
 | Redis down | async work | harvest/hydrate unavailable; **tailoring, review, and delivery all still work** (sync paths) |
 | Postgres down | everything | hard fail. Single point of failure, accepted at this scale |
 | ④ unreachable | harvest, hydrate, send | tailoring and PDF export unaffected (they live in ①) |
 
 The pattern worth noticing: the two-container split means a scraping outage cannot take down tailoring, and an LLM outage cannot take down the tracker. The blast radii are small because the seams are real.
+
+### 18.1 Verified by fault injection (P7.2.5, EC-P7-15)
+
+Every row above was a hypothesis until it was unplugged. `apps/web/tests/reliability/` injects each one; what that found is recorded here, because a failure matrix nobody has tested is a wish list.
+
+**Two rows were wrong, and both are now fixed.**
+
+**"Redis down → harvest/hydrate *unavailable*"** was half true. The synchronous paths did survive — the four-container split holds — but `queue.add()` against a refusing Redis never rejected at all. BullMQ requires `maxRetriesPerRequest: null`, which a worker genuinely needs, and combined with ioredis's default offline queue it means a command issued while disconnected waits in memory indefinitely. The request hung until the platform killed it. "Unavailable" and "hangs forever" are different products: one is a state a user is told about and routes around, the other consumes a serverless invocation per attempt and never resolves. The producer connection is now configured separately from the worker's, and the row is true as written.
+
+**"Anthropic down / no key → email rewrite"** described a provider this platform does not use. §12.2 consolidated on Groq and explicitly noted that doing so collapses two provider-outage rows into one — but §18, the §3 context diagram, and §21 were never updated to match. The code was correct throughout; three documents were not. Fixed here rather than in the code, which is the other half of what EC-P7-15 asks for.
+
+One row is **unverifiable by injection and remains reasoned**: "Postgres down → hard fail". A test that removes the database cannot then assert anything about what the application read. What *is* asserted is the shape of the failure — that Prisma's P1xxx connection errors produce a clean 503 with a maintenance message rather than a stack trace or a hang (EC-P7-16).
 
 ---
 
@@ -1436,7 +1447,7 @@ Every one of these corresponds to a guarantee the original projects made. Regres
 |------|------------|
 | `lib/schemas.ts` | 🟡 extended with platform entities; **existing types untouched** |
 | `lib/guardrails.ts` | 🟢 unchanged |
-| `lib/llm/*` | 🟢 unchanged (+ Anthropic adapter alongside) |
+| `lib/llm/*` | 🟢 unchanged. No second-provider adapter — §12.2 consolidated on Groq, so the "one adapter, not a refactor" work never happened |
 | `lib/pdf/*` | 🟢 unchanged; keep free of Next.js imports (§17) |
 | `lib/document-extract.ts` | 🟢 unchanged |
 | `lib/heuristic-resume.ts` | 🟡 promoted to the Tier-0 scorer |
