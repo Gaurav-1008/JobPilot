@@ -21,6 +21,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { __counter, __resetMetrics } from "@/lib/obs/metrics";
+
 const ALICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ATTEMPT = "11111111-1111-4111-8111-111111111111";
 const CONTACT = "22222222-2222-4222-8222-222222222222";
@@ -365,16 +367,20 @@ describe("safety test 4 — a suppressed recipient is blocked and logged", () =>
     expect(result.ok === false && result.check).toBe("opt_out");
   });
 
-  it("emits a structured block record for the metric (P5.4.9)", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("counts the block against interlock_block_total{check} (P5.4.9, P7.3.3)", async () => {
+    // P5.4.9 emitted a log line shaped like a counter because no counter
+    // existed yet. P7.3.3 made it a real one, so this asserts the counter
+    // rather than the text of a log line — the same property, checked where it
+    // now actually lives.
+    __resetMetrics();
     const token = await approve();
     db.optOuts = [{ userId: ALICE, email: "priya@acme.com" }];
     await runInterlocks({ userId: ALICE, attemptId: ATTEMPT, token });
 
-    const logged = warn.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(logged).toContain("interlock_block_total");
-    expect(logged).toContain("opt_out");
-    warn.mockRestore();
+    // EC-P7-21: an opt-out block is the system working, and carries the class
+    // that keeps it off the same dashboard as a token failure.
+    expect(__counter("interlock_block_total", { check: "opt_out", class: "expected" }))
+      .toBe(1);
   });
 });
 

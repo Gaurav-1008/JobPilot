@@ -29,6 +29,9 @@ import type {
   PreflightResponse,
 } from "@jobpilot/shared-schemas";
 
+import { currentTrace, log } from "@/lib/obs/logger";
+import { traceparentHeader } from "@/lib/obs/trace";
+
 export class WorkerError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -57,14 +60,29 @@ async function post<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+
+  // EC-P7-22 / P7.3.4 — propagate trace context across the ①→④ boundary.
+  //
+  // This is the boundary §16.3 says is the only one worth instrumenting, and
+  // until now it was where traces stopped: ④ logged its own request with its
+  // own correlation id, and nothing joined the two halves. Debugging a slow
+  // send meant reading two log streams and matching on timestamps.
+  //
+  // Absent context (a script, a test) simply omits the header. ④ then starts
+  // its own trace, which is the documented W3C behaviour and better than
+  // fabricating a parent that never existed.
+  const trace = currentTrace();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-service-token": process.env.WORKER_SERVICE_TOKEN ?? "",
+  };
+  if (trace) headers.traceparent = traceparentHeader(trace);
 
   try {
     const res = await fetch(`${base()}${path}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-service-token": process.env.WORKER_SERVICE_TOKEN ?? "",
-      },
+      headers,
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -72,6 +90,14 @@ async function post<T>(
     // EC-P2-33: ④ may answer with a non-JSON error body; a parse failure must
     // not be reported as though it were the real status.
     const text = await res.text();
+    // The span for this hop. `label` is a route name and the body is never
+    // touched — see the file header on why that separation is structural.
+    log.info("worker.call", {
+      route: label,
+      statusCode: res.status,
+      durationMs: Date.now() - started,
+      outcome: res.ok ? "ok" : "error",
+    });
     if (!res.ok) {
       // Response only. A 422 from ④ echoes field names, not our request.
       throw new WorkerError(res.status, `${label}: ${text.slice(0, 200)}`);

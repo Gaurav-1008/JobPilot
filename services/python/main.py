@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -103,17 +104,44 @@ async def service_token_and_logging(request: Request, call_next):
     elif os.getenv("JOBPILOT_ENV", "local") == "production":
         return JSONResponse({"detail": "service token not configured"}, status_code=500)
 
+    # EC-P7-22 / P7.3.4 — join ①'s trace instead of starting a private one.
+    #
+    # ① sends W3C `traceparent` (lib/obs/trace.ts). Lifting the trace-id onto
+    # every line this request produces is what makes the ①→④ boundary — the one
+    # §16.3 calls the only span worth having — readable as a single timeline
+    # rather than two log streams matched on timestamps.
+    #
+    # A malformed or absent header yields "-", never an error: a monitoring gap
+    # must not become a 500.
+    trace_id = _trace_id_from(request.headers.get("traceparent"))
+
     started = time.monotonic()
     response = await call_next(request)
-    # No PII: path, status, duration. Never query strings or bodies.
+    # No PII: path, status, duration, trace. Never query strings or bodies.
     log.info(
-        "%s %s -> %s in %dms",
+        "%s %s -> %s in %dms trace=%s",
         request.method,
         request.url.path,
         response.status_code,
         int((time.monotonic() - started) * 1000),
+        trace_id,
     )
+    # Echoed so ① can confirm the join happened rather than assuming it did.
+    response.headers["x-trace-id"] = trace_id
     return response
+
+
+_TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$")
+
+
+def _trace_id_from(header: str | None) -> str:
+    """Extract the trace-id from a W3C traceparent, or '-' when there is none."""
+    if not header:
+        return "-"
+    match = _TRACEPARENT.match(header.strip())
+    if not match or match.group(1) == "0" * 32:
+        return "-"
+    return match.group(1)
 
 
 @app.get("/health")

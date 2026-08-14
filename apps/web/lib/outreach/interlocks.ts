@@ -23,6 +23,8 @@
 
 import { scoped } from "@/lib/db/repository";
 import { findValidReview, reserveCapSlot } from "@/lib/db/stores/review";
+import { log } from "@/lib/obs/logger";
+import { interlockBlock } from "@/lib/obs/metrics";
 import { hashBody } from "@/lib/outreach/body";
 import { checkGrounding } from "@/lib/outreach/grounding";
 import { loadGroundingContext } from "@/lib/outreach/review-context";
@@ -80,13 +82,13 @@ function block(
   message: string,
   reserved = false,
 ): InterlockBlock {
-  // P5.4.9 — `interlock_block_total{check}`. There is no metrics backend in the
-  // platform yet, so this is a structured log line with a stable event name and
-  // a `check` label: the same dimensions a counter would carry, ready to be
-  // scraped or shipped without changing any call site.
-  console.warn(
-    JSON.stringify({ event: "interlock_block_total", check, message }),
-  );
+  // P5.4.9 / P7.3.3 — `interlock_block_total{check}`. This was a hand-rolled
+  // log line carrying the dimensions a counter would carry; it is now an actual
+  // counter, and the `class` label EC-P7-21 asks for is derived from the check
+  // inside the metric (opt-out and dedup blocks are the system working, and
+  // must be dashboarded apart from token and body-hash failures, which are not).
+  interlockBlock(check);
+  log.warn("interlock.block", { check, message, outcome: "blocked" });
   return { ok: false, check, message, reserved };
 }
 
@@ -291,12 +293,9 @@ export async function runInterlocks(
   } catch (err) {
     // EC-P5-56 — FAIL CLOSED. This catch is the whole reason the chain can be
     // trusted: any unexpected error is a block, never a fall-through.
-    console.error(
-      JSON.stringify({
-        event: "interlock.exception",
-        message: err instanceof Error ? err.message : String(err),
-      }),
-    );
+    // Passed as a value so the serializer projects it (name + scrubbed message)
+    // rather than us flattening a possibly credential-carrying error to a string.
+    log.error("interlock.exception", { name: "InterlockException", message: err });
     return block(
       "internal_error",
       "A safety check could not complete, so nothing was sent.",
