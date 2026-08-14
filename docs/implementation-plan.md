@@ -569,7 +569,7 @@ A box is ticked only where an automated test proves it. "Built but unverified"
 is left unticked on purpose — the whole point of this list is that it cannot be
 satisfied by reading the code.
 
-- [ ] Generated email's hook cites a skill present in `topMatchedSkills` — verifiable against the DB row
+- [x] Generated email's hook cites a skill present in `topMatchedSkills` — verifiable against the DB row
 - [ ] Evidence panel shows the tailoring artifact behind each hook
 - [x] A hand-crafted `curl` to `/deliver` without a token is rejected
 - [x] Approving, then editing the body, then delivering → rejected on hash mismatch
@@ -616,12 +616,34 @@ EC-P5-65 catching the mismatch before contacting Google). Every one wrote a
 `failed` row naming its check, left `provider_attempted_at` null, and left its
 approval token unburned.
 
-**What the two remaining boxes still need:**
+**The LLM path, verified (2026-08-14).** Every email before this came back as
+`source: "template"` — and the cause was not generation at all. ④ had no
+`GROQ_API_KEY`, because `npm run py:worker` launches uvicorn directly and
+main.py never loaded a `.env`, so `use_llm` resolved to False on every request.
+Template fallback on a missing key is correct, deliberate behaviour (EC-P5-28)
+reported honestly in `source`, which is exactly why it went unnoticed: the
+system told the truth every time while never once doing the thing P5.2 exists
+to do. A silent, correct degradation is harder to see than a failure.
+
+With ④ given its configuration, generation against the real payload from this
+account's tailoring run:
+
+```
+source      llm
+word_count  89
+payload     topMatchedSkills = ["Python", "PostgreSQL", "retrieval pipelines"]
+body        cites Python, PostgreSQL, and the 40k-queries retrieval bullet
+honestGaps  ["Kubernetes"] passed in — and absent from the body entirely
+```
+
+That last line is EC-P5-24 demonstrated on live output rather than in a
+fixture: gaps enter the prompt as a suppression list and stay out of the email.
+
+**What the one remaining box still needs:**
 
 | Box | Blocked on |
 |-----|-----------|
-| Hook cites a matched skill | The delivered email came from the TEMPLATE path, which cites no skills by design, so this is still unproven. A full `tier='full'` run exists and the payload was non-null, so the input is there — ④'s validator rejected the LLM draft and fell back. Worth chasing: with the long background it was over the word limit (EC-P5-30), and that has since been fixed. |
-| Evidence panel | A full tailoring run now backs it, so the panel renders real payload rather than the EC-P5-40 empty state. Still wants one deliberate look in a browser rather than an inference from the data. |
+| Evidence panel | A full tailoring run now backs it, so it renders a real payload rather than the EC-P5-40 empty state. Wants one deliberate look in a browser — the only criterion here that cannot be settled from the database. |
 
 ### Exit gate → Phase 6
 
