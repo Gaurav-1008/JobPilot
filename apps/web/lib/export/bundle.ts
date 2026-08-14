@@ -27,11 +27,25 @@ export interface BundleOptions {
   userId: string;
   /** EC-P6-28: replace recipient addresses with a stable placeholder. */
   redactRecipients?: boolean;
+  /**
+   * Include the side-by-side and tailored-resume PDFs.
+   *
+   * Off by default, and that is EC-P6-26 rather than laziness: each PDF is a
+   * Chromium render, so a bundle for 200 applications is a multi-minute build
+   * that does not belong in a request handler. Opt-in keeps the common export
+   * instant, and `maxPdfRuns` bounds the slow one.
+   */
+  includePdfs?: boolean;
+  maxPdfRuns?: number;
+  /** Injected so the bundle can be tested without launching a browser. */
+  renderPdfs?: (runId: string) => Promise<{ name: string; bytes: Buffer }[]>;
 }
 
 export interface BundleFile {
   name: string;
-  content: string;
+  /** Text files carry `content`; PDFs carry `bytes`. */
+  content?: string;
+  bytes?: Buffer;
 }
 
 /** `priya@acme.com` → `p****@acme.com`. Keeps the domain, loses the person. */
@@ -125,6 +139,67 @@ export async function buildBundle(options: BundleOptions): Promise<BundleFile[]>
     ]),
   );
 
+  /* ── PDFs (P6.3.1) ──────────────────────────────────────────────────── */
+  const pdfFiles: BundleFile[] = [];
+  const pdfNotes: string[] = [];
+
+  if (options.includePdfs && options.renderPdfs) {
+    const cap = options.maxPdfRuns ?? 20;
+    const runs = await prisma.tailoringRun.findMany({
+      where: { userId, tier: "full" },
+      orderBy: { createdAt: "desc" },
+      take: cap + 1,
+      include: { application: { include: { job: { select: { company: true, title: true } } } } },
+    });
+
+    if (runs.length > cap) {
+      pdfNotes.push(
+        `Only the ${cap} most recent tailoring runs are included as PDFs. ` +
+          "Older runs are listed in applications.csv and can be exported individually.",
+      );
+    }
+
+    for (const run of runs.slice(0, cap)) {
+      const label = run.application
+        ? `${run.application.job.company}-${run.application.job.title}`
+        : "run";
+      /**
+       * The date and run id are part of the name, not decoration.
+       *
+       * Re-tailoring the same job produces several `full` runs, and naming them
+       * by company and title alone made every one collide. In a tar, duplicate
+       * entries do not error — the last one extracted silently wins, so a
+       * bundle covering five tailoring attempts unpacked to one. Verified on
+       * real data: ten PDFs, two distinct filenames.
+       *
+       * Dated names also make the bundle readable as a history, which is what
+       * a proof artifact is for.
+       */
+      const day = run.createdAt.toISOString().slice(0, 10);
+      const slug = `${label}-${day}-${run.id.slice(0, 8)}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      try {
+        const rendered = await options.renderPdfs(run.id);
+        for (const file of rendered) {
+          pdfFiles.push({ name: `pdfs/${slug}-${file.name}`, bytes: file.bytes });
+        }
+      } catch (err) {
+        /**
+         * EC-P6-27 — a missing or unrenderable document is a NOTE, never a
+         * failed bundle. Losing the whole export because one PDF could not be
+         * produced would make the artifact unavailable exactly when someone
+         * needs it, and the omission is more useful stated than hidden.
+         */
+        pdfNotes.push(
+          `Could not include PDFs for ${label}: ${err instanceof Error ? err.message : "render failed"}.`,
+        );
+      }
+    }
+  }
+
   const blocked = attempts.filter((a) => a.status === "failed").length;
   const empty = summary.applications === 0 && attempts.length === 0;
 
@@ -168,7 +243,10 @@ ${blocked > 0 ? `\n${blocked} attempt(s) were refused by the safety checks and n
 
 - \`outreach_log.csv\` — every attempt, including skipped and blocked ones
 - \`applications.csv\` — every application and its status
-
+${pdfFiles.length > 0
+  ? `- \`pdfs/\` — ${pdfFiles.length} file(s): the tailored résumé and the side-by-side proof for each run`
+  : "- (no PDFs in this bundle — export with PDFs enabled to include them)"}
+${pdfNotes.length > 0 ? `\nNotes on what is missing:\n${pdfNotes.map((n) => `- ${n}`).join("\n")}\n` : ""}
 ## What is in here about other people
 
 ${redactRecipients
@@ -183,5 +261,6 @@ or \`@\` open as text rather than executing as formulas.
     { name: "README.md", content: readme },
     { name: "outreach_log.csv", content: outreachCsv },
     { name: "applications.csv", content: applicationsCsv },
+    ...pdfFiles,
   ];
 }

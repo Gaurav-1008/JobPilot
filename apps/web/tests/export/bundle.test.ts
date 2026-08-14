@@ -14,6 +14,7 @@ const db = vi.hoisted(() => ({
   attempts: [] as Record<string, unknown>[],
   applications: [] as Record<string, unknown>[],
   counts: { job: 0, hydrated: 0, scored: 0, application: 0, tailoring: 0, contact: 0 },
+  runs: [] as Record<string, unknown>[],
 }));
 
 vi.mock("@/lib/db/stores/export-queries", () => ({
@@ -27,13 +28,16 @@ vi.mock("@/lib/db/stores/export-queries", () => ({
         where.originalScore ? db.counts.scored : db.counts.application,
       findMany: async () => db.applications,
     },
-    tailoringRun: { count: async () => db.counts.tailoring },
+    tailoringRun: {
+      count: async () => db.counts.tailoring,
+      findMany: async ({ take }: { take: number }) => db.runs.slice(0, take),
+    },
     contact: { count: async () => db.counts.contact },
     outreachAttempt: { findMany: async () => db.attempts },
   },
 }));
 
-import { buildBundle } from "@/lib/export/bundle";
+import { buildBundle, type BundleFile } from "@/lib/export/bundle";
 
 function attempt(overrides: Record<string, unknown> = {}) {
   return {
@@ -62,10 +66,11 @@ beforeEach(() => {
     },
   ];
   db.counts = { job: 5, hydrated: 1, scored: 1, application: 1, tailoring: 2, contact: 1 };
+  db.runs = [{ id: "run-1aaaaaaa", createdAt: new Date("2026-08-14T00:00:00Z"), application: { job: { company: "Acme", title: "AI Engineer" } } }];
 });
 
-const fileNamed = (files: { name: string; content: string }[], name: string) =>
-  files.find((f) => f.name === name)!.content;
+const fileNamed = (files: BundleFile[], name: string) =>
+  files.find((f) => f.name === name)!.content!;
 
 describe("the bundle's contents", () => {
   it("contains a README, the outreach log, and the applications list", async () => {
@@ -157,5 +162,75 @@ describe("an empty account (EC-P6-30)", () => {
 
     // Headers survive so the files open as valid CSVs rather than blank.
     expect(fileNamed(files, "outreach_log.csv")).toContain("timestamp");
+  });
+});
+
+describe("PDFs in the bundle (P6.3.1)", () => {
+  const renderPdfs = async () => [
+    { name: "tailored-resume.pdf", bytes: Buffer.from("%PDF-1.4 tailored") },
+    { name: "side-by-side.pdf", bytes: Buffer.from("%PDF-1.4 proof") },
+  ];
+
+  it("omits them by default, and says so (EC-P6-26)", async () => {
+    // Each PDF is a Chromium render; the common export must stay instant.
+    const files = await buildBundle({ userId: USER });
+    expect(files.some((f) => f.name.startsWith("pdfs/"))).toBe(false);
+    expect(fileNamed(files, "README.md")).toMatch(/no PDFs in this bundle/i);
+  });
+
+  it("includes both documents per run when asked", async () => {
+    const files = await buildBundle({ userId: USER, includePdfs: true, renderPdfs });
+    const pdfs = files.filter((f) => f.name.startsWith("pdfs/"));
+
+    expect(pdfs).toHaveLength(2);
+    expect(pdfs.some((f) => f.name.endsWith("tailored-resume.pdf"))).toBe(true);
+    expect(pdfs.some((f) => f.name.endsWith("side-by-side.pdf"))).toBe(true);
+    // Binary, not text — the tar writer distinguishes them.
+    expect(pdfs[0].bytes?.toString()).toContain("%PDF");
+    expect(fileNamed(files, "README.md")).toMatch(/pdfs\//);
+  });
+
+  it("notes an unrenderable document instead of failing the bundle (EC-P6-27)", async () => {
+    // Losing the whole export to one bad PDF makes the artifact unavailable
+    // exactly when someone needs it.
+    const files = await buildBundle({
+      userId: USER,
+      includePdfs: true,
+      renderPdfs: async () => { throw new Error("missing from storage"); },
+    });
+
+    expect(files.some((f) => f.name === "outreach_log.csv")).toBe(true);
+    expect(fileNamed(files, "README.md")).toMatch(/could not include PDFs/i);
+    expect(fileNamed(files, "README.md")).toMatch(/missing from storage/);
+  });
+
+  it("gives every run a distinct filename", async () => {
+    // Re-tailoring one job makes several `full` runs. Naming by company and
+    // title alone collided, and tar resolves duplicates by silently letting
+    // the last one win — so a bundle of five attempts unpacked to one.
+    db.runs = Array.from({ length: 3 }, (_, i) => ({
+      id: `run-${i}bbbbbbb`,
+      createdAt: new Date(`2026-08-1${i + 1}T00:00:00Z`),
+      application: { job: { company: "Acme", title: "AI Engineer" } },
+    }));
+
+    const files = await buildBundle({ userId: USER, includePdfs: true, renderPdfs });
+    const names = files.filter((f) => f.name.startsWith("pdfs/")).map((f) => f.name);
+
+    expect(names).toHaveLength(6);
+    expect(new Set(names).size).toBe(6);
+  });
+
+  it("caps how many runs are rendered", async () => {
+    db.runs = Array.from({ length: 5 }, (_, i) => ({
+      id: `run-${i}aaaaaaa`,
+      createdAt: new Date("2026-08-14T00:00:00Z"),
+      application: { job: { company: "Acme", title: `Role ${i}` } },
+    }));
+    const files = await buildBundle({
+      userId: USER, includePdfs: true, maxPdfRuns: 2, renderPdfs,
+    });
+    expect(files.filter((f) => f.name.startsWith("pdfs/"))).toHaveLength(4);   // 2 runs x 2 docs
+    expect(fileNamed(files, "README.md")).toMatch(/Only the 2 most recent/);
   });
 });

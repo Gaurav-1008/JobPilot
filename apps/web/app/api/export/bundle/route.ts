@@ -17,16 +17,19 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { toErrorResponse } from "@/lib/api-errors";
 import { buildBundle, type BundleFile } from "@/lib/export/bundle";
+import { getRun } from "@/lib/db/stores/tailoring-run";
+import { generatePdfs } from "@/services/pdf-generator";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 180;   // Chromium renders, when ?pdfs=1
 
 /** Minimal USTAR writer. A tar entry is a 512-byte header plus padded data. */
 function tar(files: BundleFile[]): Buffer {
   const blocks: Buffer[] = [];
 
   for (const file of files) {
-    const data = Buffer.from(file.content, "utf8");
+    // Text entries carry `content`; PDFs carry raw `bytes`.
+    const data = file.bytes ?? Buffer.from(file.content ?? "", "utf8");
     const header = Buffer.alloc(512);
 
     header.write(file.name.slice(0, 99), 0, "utf8");            // name
@@ -63,7 +66,31 @@ export async function GET(request: Request) {
     const redactRecipients =
       new URL(request.url).searchParams.get("redact") === "1";
 
-    const files = await buildBundle({ userId, redactRecipients });
+    /**
+     * PDFs are opt-in (EC-P6-26). Each one is a Chromium render, so a bundle
+     * covering every application is a multi-minute build; the default export
+     * stays instant and `?pdfs=1` accepts the wait for a complete artifact.
+     */
+    const includePdfs = new URL(request.url).searchParams.get("pdfs") === "1";
+
+    const files = await buildBundle({
+      userId,
+      redactRecipients,
+      includePdfs,
+      renderPdfs: includePdfs
+        ? async (runId) => {
+            const run = await getRun(runId, userId);
+            // Tenant-scoped: another user's run resolves to null, and the
+            // bundle records the omission rather than including it.
+            if (!run) throw new Error("run not found");
+            const rendered = await generatePdfs(run, ["tailored", "comparison"]);
+            return rendered.map((p) => ({
+              name: p.type === "tailored" ? "tailored-resume.pdf" : "side-by-side.pdf",
+              bytes: p.buffer,
+            }));
+          }
+        : undefined,
+    });
     const archive = tar(files);
 
     const stamp = new Date().toISOString().slice(0, 10);
