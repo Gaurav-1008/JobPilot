@@ -723,7 +723,7 @@ A box is ticked only where an automated test or live data proves it.
 
 - [x] Five real jobs visible on one screen with scores, resume versions, and outreach history
 - [x] Statuses advance automatically as the pipeline runs
-- [ ] A follow-up appears in the review queue and requires the same approval to send
+- [x] A follow-up appears in the review queue and requires the same approval to send
 - [x] The bundle opens and contains PDFs, log, and summary
 - [x] Legacy CSVs import without duplicating existing rows
 
@@ -757,11 +757,28 @@ both CSVs, and a `pdfs/` directory whose files begin with `%PDF`. EC-P6-27 fired
 on real data along the way: an analyze-only run could not render, and the bundle
 recorded the omission in its manifest instead of failing.
 
-**What the one open box still needs:**
+**The follow-up, demonstrated (2026-08-14).** A real email was sent — Gmail
+message `19ffe3352d98efc2`, 83 words, LLM-generated — and the sweep then found
+exactly that attempt and drafted a reply to it:
 
-| Box | Blocked on |
-|-----|-----------|
-| Follow-up in the review queue | Nothing is eligible, correctly. The sweep keys off `outreach_attempts.status='sent'` (EC-P6-11) and this account's only delivery is a Gmail **draft** — following up on an unsent email is exactly the failure that rule prevents. Needs Google re-authorized with `gmail.send`, one real send, and then either seven days or a sweep run with `?days=0`. |
+```
+follow-up          status=generated  provider=dry_run  providerMessageId=(none)
+                   parentId=354cba57  bodyHash present
+second sweep       candidates: 0        <- no duplicate (EC-P6-14/15)
+```
+
+`generated` and `dry_run` are the guarantee stated in data: the sweep drafted
+and stopped. The row is indistinguishable from one written by hand, carries a
+body hash for approval to bind to, and must traverse the same twelve interlocks
+before it can go anywhere. Running the sweep a second time the same day produced
+nothing, which is EC-P6-14 and EC-P6-15 holding on live data rather than in a
+fixture.
+
+Worth recording that this took a real send to reach, and that the wait was the
+rule working: the sweep keys off `outreach_attempts.status='sent'`, so while
+this account had only a Gmail draft it was correctly ineligible (EC-P6-11).
+Following up on an email that was never sent is the failure that rule exists to
+prevent.
 
 **A bug this audit found, on live data.** An application that had reached
 `emailed` was showing as `tailored` again. `finaliseTailoredScore` wrote
