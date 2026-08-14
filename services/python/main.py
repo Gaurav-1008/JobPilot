@@ -17,6 +17,27 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# ── Service configuration, before anything reads it ──────────────────────────
+#
+# ④ holds no cross-call state (ADR-002), but it still needs its own SERVICE
+# config: the Groq key, the email model, the service token. Nothing was
+# supplying it. `npm run py:worker` launches uvicorn directly and main.py never
+# loaded a .env, so `os.getenv("GROQ_API_KEY")` was always empty.
+#
+# The consequence was silent and total: routers/outreach_email.py computes
+# `use_llm = body.use_llm and bool(config.groq_api_key)`, so with no key every
+# request fell to the deterministic template and reported `source: "template"`
+# — honestly, and forever. The LLM path had never executed in this deployment,
+# and because template fallback is CORRECT behaviour on a missing key, nothing
+# ever looked broken.
+#
+# `override=False` so a real environment (container, CI, systemd) always wins
+# over a checked-out .env; this only fills gaps for local runs.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
