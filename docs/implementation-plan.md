@@ -818,6 +818,15 @@ adding the delivery import and writing `status: 'sent'` trips three assertions.
 **Objective:** the difference between "works" and "shippable."
 **Duration:** 6 days.
 
+> **Status: code complete; four of five acceptance criteria closed.** The
+> outstanding one is the §18 demo, which needs a live run against real boards.
+> Deployment (P7.4.1/P7.4.2) needs infrastructure rather than code — see
+> [What is NOT done](#what-is-not-done-and-why) at the end of this phase.
+>
+> Two documented behaviours turned out to be wrong and were fixed: a Redis
+> outage hung instead of degrading, and §18 described an LLM provider this
+> platform has never called. Both are recorded in `architecture.md` §18.1.
+
 ### P7.1 — UX
 
 | # | Task |
@@ -871,10 +880,33 @@ adding the delivery import and writing `status: 'sent'` trips three assertions.
 ### Acceptance criteria
 
 - [ ] Full §18 demo runs start to finish without a console error
-- [ ] Every failure-matrix row degrades as documented under fault injection
-- [ ] No PII in any log line
-- [ ] Staging physically cannot email a real person
-- [ ] Account deletion removes every row and every stored object
+- [x] Every failure-matrix row degrades as documented under fault injection
+- [x] No PII in any log line
+- [x] Staging physically cannot email a real person
+- [x] Account deletion removes every row and every stored object
+
+**Four of five.** The demo criterion is the outstanding one, and it is
+outstanding for a reason that cannot be closed from a keyboard: it requires a
+live run against real job boards, which nothing in the test suite can stand in
+for. [`demo-script.md`](./demo-script.md) is written and rehearsable; P7.5.4
+(recording it) is the remaining work.
+
+The failure-matrix criterion was closed by finding two rows that were wrong —
+one in the code, one in the documentation — which is what makes it worth having
+checked. §18.1 records both.
+
+### What is NOT done, and why
+
+Recorded here rather than quietly dropped, because a plan that only lists
+successes stops being useful for the next phase.
+
+| # | Task | Status |
+|---|------|--------|
+| P7.4.1 | Deploy ① / ③ / ④ | **Not done — needs infrastructure, not code.** The artifacts exist (`Dockerfile` for ④, `docker-compose.yml` for the local stack, startup config validation that refuses to boot on a bad environment). Provisioning a Vercel project and a container platform requires accounts and credentials, and is the owner's call. |
+| P7.4.2 | Managed Postgres, Redis, object storage | **Partial.** Postgres is already a hosted Supabase project (§22.1). Redis and S3-compatible storage run in docker-compose locally; the drivers (`ioredis`, `@aws-sdk/client-s3`) are the same ones a managed service takes, so this is configuration rather than code. |
+| P7.4.1 | ④ Chromium smoke test (EC-P7-30) | **Not done.** The classic Playwright deployment failure — works locally, no browser in the production image — can only be tested against a deployed image. `main.py`'s lifespan already probes Chromium at startup and warns loudly; that turns the failure into a boot-time signal rather than a hung scrape, but it is not the same as having tested the built image. |
+| P7.5.4 | Record the demo | **Not done.** Needs a live harvest. Script and recording notes are in [`demo-script.md`](./demo-script.md). |
+| — | Metrics dashboarding | **Emitted, not dashboarded.** `/api/metrics` renders Prometheus text and every label is bounded (EC-P7-20), but nothing scrapes it. §17 provisions no metrics service; see §22.3. |
 
 ---
 
@@ -1095,9 +1127,33 @@ From [`architecture.md`](./architecture.md) §22.
 [ ] scripts/import-legacy-csv.ts                   🔴
 
 ── Phase 7 ──────────────────────────────────────────────
-[ ] docs/migration-notes.md                        🔴
-[ ] docs/demo-script.md                            🔴
+[✓] apps/web/lib/obs/redact.ts                     🔴  ⚠ allow-list serializer
+[✓] apps/web/lib/obs/logger.ts                     🔴
+[✓] apps/web/lib/obs/metrics.ts                    🔴  ⚠ bounded labels
+[✓] apps/web/lib/obs/trace.ts                      🟡
+[✓] apps/web/lib/health/dependencies.ts            🔴
+[✓] apps/web/lib/config/require-env.ts             🔴
+[✓] apps/web/lib/outreach/send-policy.ts           🔴  ⚠ staging override
+[✓] apps/web/lib/db/stores/account-deletion.ts     🔴
+[✓] apps/web/lib/llm/quota.ts                      🟡
+[✓] apps/web/components/ui/list-state.tsx          🟡
+[✓] apps/web/components/layout/DegradationBanner.tsx 🟡
+[✓] apps/web/app/api/{health,metrics,account}/route.ts 🔴
+[✓] apps/web/app/api/harvest/[id]/retry/route.ts   🟡
+[✓] apps/web/instrumentation.ts                    🔴
+[✓] scripts/{verify-key-rotation,rotate-credentials,reap-deletions}.mjs 🔴
+[✓] docs/runbooks/encryption-key-rotation.md       🔴
+[✓] docs/migration-notes.md                        🔴
+[✓] docs/demo-script.md                            🔴
 ```
+
+**Note on the "untouched throughout" list below.** `lib/llm/logger.ts` WAS
+touched in Phase 7, deliberately: EC-P7-19 requires prompt tracing to route
+through the allow-list serializer, because Phase 5 gave outreach prompts a
+payload carrying resume bullets and recipient names. The file's behaviour is
+unchanged — same fields, same call sites — but its output now passes through
+redaction. This is the "stop and ask why" the list asks for, answered in
+advance.
 
 **Untouched throughout — if any of these appear in a diff, stop and ask why:**
 

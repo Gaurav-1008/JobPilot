@@ -1490,16 +1490,26 @@ Resolved before Phase 0 by taking the documented default in each case. Revisit o
 | — | `LLM_MODEL` collision (EC-P0-04) | **`TAILORING_MODEL` + `EMAIL_LLM_MODEL`** | The bare name meant the Groq model in one project and the Claude model in the other. It must not survive the merge |
 | — | Python floor (EC-P0-06) | **3.10+** | The Closer already requires it. Harvester's tests run on 3.10 before its 🟢 marker is trusted |
 
-### 22.2 Still open
+### 22.2 Resolved in Phase 7 (P7.5.2)
 
-Each needs a decision before the phase that depends on it.
+Every question below now has an answer taken from what was built, not from what was planned. Where the answer is "the documented default held", that is recorded as a decision rather than left as an open item — an open question that nobody has revisited in seven phases is a decision that was made by default, and saying so is more honest than leaving it looking undecided.
 
-3. **`posted_at` normalization** — boards emit `"2 days ago"`, `"Today"`, and absolute dates. `posted_at_parsed` is best-effort; how aggressively to parse per board is a Phase 2 detail.
-4. ~~**Tier-1 batching**~~ — **DECIDED: 5 per request**, sized by estimated tokens. Measured 119 prompt tokens/job at batch 5 vs 337 at batch 1; the curve is flat by 5, and larger batches widen the blast radius when one response is malformed (EC-P4-10).
-5. **SSE vs polling** — SSE is specified with a polling fallback. If the deployment target complicates streaming, polling alone is acceptable; the durable `board_results` record makes it work either way.
-6. **Follow-up cadence `N`** — 5 days? 7? User-configurable? Product decision, Phase 6.
-7. **PDF rendering location** — stays in ① until Playwright-in-serverless causes trouble; ④ is the pre-planned move (§17).
-8. **Multi-user scale** — this design targets tens of users. Global per-board rate limits become the bottleneck well before Postgres does. That is the right constraint to hit first, and revisiting it means talking to the boards, not scaling the database.
+| # | Question | **Resolution** | Evidence |
+|---|----------|----------------|----------|
+| 3 | `posted_at` normalization | **Best-effort per board, and the raw string is always kept.** `posted_at` stores verbatim what the board emitted; `posted_at_parsed` is nullable and populated when `parsePostedAt` recognises the format. Nothing in the product depends on the parsed value being present — sorting falls back to `created_at` — so a board inventing a new date phrasing degrades a sort, not a run (EC-P2-51). | `services/orchestrator/lib/posted-at.ts`, `tests/orchestrator/posted-at.test.ts` |
+| 4 | Tier-1 batching | **5 per request**, sized by estimated tokens. Measured 119 prompt tokens/job at batch 5 vs 337 at batch 1; the curve is flat by 5, and larger batches widen the blast radius when one response is malformed (EC-P4-10). | Decided in Phase 4, unchanged |
+| 5 | SSE vs polling | **Both, permanently — and polling is the one that matters.** Not the fallback it was specified as: the client polls the durable record on a 2s interval *and* opens an SSE stream, and the stream is treated as an optimisation that may drop at any moment. Streams die on mobile, on sleep, and behind buffering proxies, and `board_results` makes the poll authoritative either way (EC-P2-42/43). | `app/(dashboard)/search/page.tsx` |
+| 6 | Follow-up cadence `N` | **5 days, fixed, not user-configurable.** Configurability here is a setting that mostly lets someone make the product more annoying on their behalf; 5 days is long enough not to nag and short enough to stay in memory. Revisit only with evidence from real use. | Phase 6, `lib/outreach/followup-sweep.ts` |
+| 7 | PDF rendering location | **Stays in ①.** Playwright-in-serverless never caused the trouble the escape hatch was planned for. `lib/pdf/renderer.ts` remains free of Next.js imports, so moving it to ④ is still a config change rather than a rewrite — the option is kept, unexercised, and the fault-injection suite asserts the renderer does not call the worker. | `tests/reliability/failure-matrix.test.ts` |
+| 8 | Multi-user scale | **Unchanged, and now measurable.** The design still targets tens of users, and global per-board rate limits are still the first bottleneck. Phase 7 adds the instrumentation that would show it arriving: `harvest_board_outcome{board,status}` distinguishes a board degrading from a board rate-limiting us, which is the signal that says it is time to talk to the boards rather than scale the database. | §16.2, `lib/obs/metrics.ts` |
+
+### 22.3 Opened by Phase 7
+
+Two questions the hardening work created rather than answered. Both are honest gaps, not oversights.
+
+1. **Metrics have no backend.** `/api/metrics` renders Prometheus text and the counters are correct and bounded (EC-P7-20), but nothing scrapes it and the registry is per-instance and resets on deploy. That is the right shape for counters and the wrong shape for a dashboard nobody has built. Provisioning a TSDB is a deployment decision (§17 lists no metrics service), and until one exists the §16.2 set is *emittable* rather than *dashboarded* — which is a weaker claim than P7.3.3 makes.
+
+2. **The LLM quota is a request count, not a token budget.** `LLM_CALLS_PER_USER_PER_DAY` bounds calls, and calls vary in cost by more than an order of magnitude between a Tier-1 batch and a full tailoring chain. Counting tokens would bound the actual bill, and needs usage accounting to survive the process — which means the same Redis the counter already uses, and a decision about what to do when a single call blows the remaining budget mid-request.
 
 ---
 
