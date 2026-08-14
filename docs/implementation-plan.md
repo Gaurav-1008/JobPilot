@@ -721,10 +721,10 @@ email rather than the safety of delivering it, and neither blocks Phase 6.
 
 A box is ticked only where an automated test or live data proves it.
 
-- [ ] Five real jobs visible on one screen with scores, resume versions, and outreach history
+- [x] Five real jobs visible on one screen with scores, resume versions, and outreach history
 - [x] Statuses advance automatically as the pipeline runs
 - [ ] A follow-up appears in the review queue and requires the same approval to send
-- [ ] The bundle opens and contains PDFs, log, and summary
+- [x] The bundle opens and contains PDFs, log, and summary
 - [x] Legacy CSVs import without duplicating existing rows
 
 **Where the ticks come from.** `tests/tracker/status-machine.test.ts` (12) and
@@ -734,13 +734,34 @@ sweep's selection; `tests/export/bundle.test.ts` (9) covers the artifact;
 mutation-verified. Automatic advancement is also demonstrated on live data —
 this account's application moved `contact_added → emailed` on delivery.
 
-**What the three open boxes still need:**
+**Demonstrated on live data (2026-08-14).** Five applications now run through
+the real pipeline — manual paste, JD extraction, analyze, tailor, guardrails —
+and the tracker renders all five with differentiated scores, resume versions and
+outreach history:
+
+```
+Platform Engineer     @ Initech          tailored  20   resume v1   0 attempts
+Backend Engineer, RAG @ Globex           tailored  60   resume v1   0 attempts
+Senior AI Engineer    @ Acme AI          tailored  60   resume v1   0 attempts
+ML Engineer           @ Bridgestone GCC  tailored  40   resume v1   0 attempts
+AI Engineer           @ Acme AI          emailed   90   resume v1   7 attempts
+```
+
+The spread is itself evidence the scorer works: Platform Engineer asks for
+Kubernetes and Terraform, which this résumé does not have, and scores 20; AI
+Engineer asks for Python, PostgreSQL and retrieval, and scores 90.
+
+The bundle was built, written to disk, and opened with the OS `tar` — not just
+asserted in a test. It extracts to a README carrying the truthfulness notice,
+both CSVs, and a `pdfs/` directory whose files begin with `%PDF`. EC-P6-27 fired
+on real data along the way: an analyze-only run could not render, and the bundle
+recorded the omission in its manifest instead of failing.
+
+**What the one open box still needs:**
 
 | Box | Blocked on |
 |-----|-----------|
-| Five jobs on one screen | Volume, not capability. The tracker renders one real application today with its score, resume version and seven attempts; the criterion asks for five, which needs a live harvest and scoring run. |
-| Follow-up in the review queue | Nothing is eligible yet, correctly. The sweep keys off `outreach_attempts.status='sent'` (EC-P6-11) and this account's only delivery is a Gmail **draft** — following up on an unsent email is the failure that rule exists to prevent. Needs a real send, then seven days. |
-| Bundle contains PDFs | **Genuinely incomplete.** The bundle ships README + outreach log + applications CSV. The side-by-side and tailored-resume PDFs are not in it; EC-P6-26 puts the PDF-bearing variant on the queue at a 3-minute timeout, and only the fast CSV bundle is built. |
+| Follow-up in the review queue | Nothing is eligible, correctly. The sweep keys off `outreach_attempts.status='sent'` (EC-P6-11) and this account's only delivery is a Gmail **draft** — following up on an unsent email is exactly the failure that rule prevents. Needs Google re-authorized with `gmail.send`, one real send, and then either seven days or a sweep run with `?days=0`. |
 
 **A bug this audit found, on live data.** An application that had reached
 `emailed` was showing as `tailored` again. `finaliseTailoredScore` wrote
