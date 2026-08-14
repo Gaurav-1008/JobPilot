@@ -7,6 +7,8 @@
  * caught all four Phase 2 routes.
  */
 
+import type { Prisma } from "@prisma/client";
+
 import { prisma } from "../client";
 import { advanceApplicationStatus } from "./tracker";
 
@@ -49,6 +51,46 @@ export async function failUnqueuedRun(id: string, reason: string) {
   });
 }
 
+/**
+ * Re-open a finished run for a retry of specific boards (P7.2.1, EC-P7-13).
+ *
+ * The failed boards' entries are CLEARED rather than left in place, so the UI
+ * shows them as "waiting" again instead of displaying a stale failure next to a
+ * spinner. Successful boards keep their results untouched — that is the whole
+ * point of retrying a subset.
+ *
+ * `finishedAt` is nulled because the run is live again; leaving it set would
+ * make a running job look terminal to EC-P7-12's check, which would let a
+ * second retry start on top of this one.
+ */
+export async function reopenRunForRetry(
+  id: string,
+  userId: string,
+  boards: string[],
+  attempt: number,
+) {
+  const run = await prisma.harvestRun.findFirst({
+    where: { id, userId },
+    select: { boardResults: true },
+  });
+  if (!run) return null;
+
+  const results = {
+    ...((run.boardResults as Record<string, Prisma.InputJsonValue>) ?? {}),
+  };
+  for (const board of boards) delete results[board];
+
+  return prisma.harvestRun.update({
+    where: { id },
+    data: {
+      status: "running",
+      finishedAt: null,
+      retryCount: attempt,
+      boardResults: results,
+    },
+  });
+}
+
 /** EC-P1-26: a foreign id resolves to null, so the route 404s rather than 403s. */
 export async function getHarvestRun(id: string, userId: string) {
   const run = await prisma.harvestRun.findFirst({
@@ -56,6 +98,7 @@ export async function getHarvestRun(id: string, userId: string) {
     select: {
       id: true, roleQuery: true, location: true, boards: true,
       status: true, boardResults: true, startedAt: true, finishedAt: true,
+      retryCount: true,
     },
   });
   if (!run) return null;

@@ -35,7 +35,7 @@ import { Queue } from "bullmq";
 import Redis from "ioredis";
 
 import { log } from "@/lib/obs/logger";
-import { QUEUE_NAME, runJobId, hydrateJobId, scoreBatchJobId, type HarvestRunJob, type HydrateJobPayload, type ScoreBatchPayload } from "./types";
+import { QUEUE_NAME, boardJobId, runJobId, hydrateJobId, scoreBatchJobId, type HarvestBoardJob, type HarvestRunJob, type HydrateJobPayload, type ScoreBatchPayload } from "./types";
 
 /**
  * Thrown when background work cannot be accepted.
@@ -83,6 +83,18 @@ function connection(): Redis {
   return g.__jobpilotRedis;
 }
 
+/**
+ * The shared producer connection.
+ *
+ * Exported for the LLM quota (lib/llm/quota.ts), which counts in Redis because
+ * that is the only store ① and ③ share. Reusing this connection rather than
+ * opening a second one keeps the fail-fast settings above — a quota check must
+ * not be the thing that hangs a request.
+ */
+export function queueConnection(): Redis {
+  return connection();
+}
+
 export function harvestQueue(): Queue {
   g.__jobpilotQueue ??= new Queue(QUEUE_NAME, { connection: connection() });
   return g.__jobpilotQueue;
@@ -127,6 +139,36 @@ export async function enqueueHarvest(data: HarvestRunJob): Promise<void> {
       removeOnComplete: 50,
       removeOnFail: 50,
     }),
+  );
+}
+
+/**
+ * P7.2.1 / EC-P7-13 — retry ONLY the boards that failed.
+ *
+ * `board_results` already records which board failed and why, so re-running the
+ * whole search is both slower for the user and unkind to the boards that
+ * already answered — it re-scrapes sites that did nothing wrong, which is what
+ * §11.4's conduct controls exist to avoid.
+ *
+ * Enqueues board children directly rather than a fresh `harvest:run`, so jobs
+ * already harvested stay attached to the original run and results accumulate
+ * instead of forking into a second run the user has to reconcile.
+ */
+export async function enqueueHarvestBoards(
+  jobs: HarvestBoardJob[],
+  attempt: number,
+): Promise<void> {
+  const q = harvestQueue();
+  await enqueue("harvest:board", () =>
+    Promise.all(jobs.map((j) =>
+      q.add("harvest:board", j, {
+        jobId: boardJobId(j.runId, j.board, attempt),
+        attempts: 2,                                  // EC-P2-29: two, not five
+        backoff: { type: "exponential", delay: 5_000 },
+        removeOnComplete: 100,
+        removeOnFail: 100,
+      }),
+    )),
   );
 }
 

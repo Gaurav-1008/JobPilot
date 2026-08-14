@@ -6,6 +6,8 @@ import { enqueueScoreBatch } from "@/lib/queue/producer";
 import { getDefaultResume } from "@/lib/db/stores/resume";
 import { countHydratedJobs } from "@/lib/db/stores/harvest";
 import { toErrorResponse, BadRequestError } from "@/lib/api-errors";
+import { peekLlmQuota } from "@/lib/llm/quota";
+import { queueConnection } from "@/lib/queue/producer";
 
 export const runtime = "nodejs";
 
@@ -36,8 +38,40 @@ export async function POST(request: Request) {
       );
     }
 
+    /**
+     * P7.2.3 / EC-P7-14 — a per-user daily LLM budget, checked before the run.
+     *
+     * The check is at the DOOR here, not inside the batch: the orchestrator
+     * keeps its own per-call accounting so a run that exhausts the quota
+     * halfway stops cleanly with its partial results persisted. This one only
+     * refuses to START a run for a user who already has nothing left, which is
+     * the case where queuing would produce a job that immediately gives up.
+     *
+     * The message says what happened and when it resets. "Quota exceeded" with
+     * no number is indistinguishable from a bug, and a user who cannot tell
+     * those apart will retry until they can.
+     */
+    const quota = await peekLlmQuota(queueConnection(), userId);
+    if (!quota.ok) {
+      const hours = Math.ceil(quota.retryAfterSec / 3600);
+      return NextResponse.json(
+        {
+          error:
+            `You have used all ${quota.limit} of today's scoring and tailoring runs. ` +
+            `This resets in about ${hours} hour${hours === 1 ? "" : "s"}. ` +
+            "Everything already scored is still there.",
+          code: "LLM_QUOTA_EXCEEDED",
+          remaining: 0,
+        },
+        { status: 429, headers: { "Retry-After": String(quota.retryAfterSec) } },
+      );
+    }
+
     await enqueueScoreBatch({ userId, harvestRunId: parsed.data.harvestRunId });
-    return NextResponse.json({ queued: hydrated }, { status: 202 });
+    return NextResponse.json(
+      { queued: hydrated, quotaRemaining: quota.remaining },
+      { status: 202 },
+    );
   } catch (err) {
     return toErrorResponse(err);
   }

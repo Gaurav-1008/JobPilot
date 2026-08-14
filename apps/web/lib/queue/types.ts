@@ -46,8 +46,21 @@ export type JobName = "harvest:run" | "harvest:board" | "hydrate:job" | "score:b
  * Using colons here silently costs you idempotency, because the add() throws
  * and the job is never enqueued.
  */
-export function boardJobId(runId: string, board: string): string {
-  return `harvest-${runId}-${board}`;
+export function boardJobId(runId: string, board: string, attempt = 0): string {
+  // P7.2.1 / EC-P7-13 — a user-initiated retry needs a DIFFERENT id.
+  //
+  // The determinism above is what stops a redelivered message scraping a board
+  // twice, and it works because the id is derived from the run and the board.
+  // A retry is the one case where repeating the work is the intent, and with
+  // `removeOnComplete: 100` the finished job may still be in Redis — so reusing
+  // the id makes BullMQ discard the retry as a duplicate, silently. The button
+  // appears to work and nothing happens.
+  //
+  // Attempt 0 keeps the original id verbatim, so nothing about the first run
+  // changes and existing job ids stay stable.
+  return attempt === 0
+    ? `harvest-${runId}-${board}`
+    : `harvest-${runId}-${board}-r${attempt}`;
 }
 
 export function runJobId(runId: string): string {

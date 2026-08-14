@@ -95,6 +95,9 @@ model HarvestRun {
   boardResults Json      @default("{}") @map("board_results")
   startedAt    DateTime? @map("started_at") @db.Timestamptz
   finishedAt   DateTime? @map("finished_at") @db.Timestamptz
+  /// P7.2.1 / EC-P7-13: caps user-initiated retries, and makes the board job id
+  /// unique per attempt so BullMQ cannot discard a retry as a duplicate.
+  retryCount   Int       @default(0) @map("retry_count")
 
   user         User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobs         Job[] @relation("JobFirstSeen")

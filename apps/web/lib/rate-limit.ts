@@ -51,3 +51,17 @@ export function rateLimit(
   entry.count += 1;
   return { ok: true, retryAfterSec: 0 };
 }
+
+/**
+ * The per-user LLM quota (P7.2.3) is NOT here, deliberately.
+ *
+ * The plan says "per-user LLM quota via the existing rate-limit.ts", and this
+ * file cannot do that job. The counters above live in one process's memory —
+ * fine for their purpose, which is blunting a burst against an expensive route
+ * — but the LLM spend that needs bounding happens in ③, the orchestrator,
+ * during batch scoring. An in-memory counter in ① cannot see it, and ① is
+ * autoscaled besides, so N instances would each grant a full budget.
+ *
+ * The quota therefore lives in lib/llm/quota.ts and counts in Redis, which is
+ * the only store both services share. See that file for why it fails OPEN.
+ */

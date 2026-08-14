@@ -16,6 +16,7 @@ import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
 
 import { scoreTier0, DEFAULT_TIER0_FLOOR } from "../../../apps/web/lib/scoring/tier0";
+import { consumeLlmQuota } from "../../../apps/web/lib/llm/quota";
 import { userStillExists } from "./harvest";
 import {
   buildScoringPrompt,
@@ -165,7 +166,37 @@ export async function handleScoreBatch(
   let promptTokens = 0;
   let completionTokens = 0;
 
+  /** EC-P7-14 — set when the budget runs out, so the user can be told. */
+  let quotaExhausted = false;
+  /** How many jobs the cheap model actually refined, which a cut-short run
+      makes smaller than the number submitted. */
+  let refinedCount = 0;
+
   for (const batch of chunkByBudget(tier1Inputs)) {
+    /**
+     * P7.2.3 / EC-P7-14 — spend one unit per REQUEST, and stop cleanly.
+     *
+     * Charged per request rather than per job because one Tier-1 batch is one
+     * billed call covering up to five jobs (§22.1 #4). Charging per job would
+     * make the quota mean something different every time batching is retuned.
+     *
+     * Running out is a STOP, not a failure. Everything scored so far is already
+     * persisted, and Tier-0 scores exist for every job (P4.2.3) — so a run that
+     * stops here still leaves every job ranked, just some of them heuristically
+     * rather than by the cheap model. `break` rather than `return`, so the
+     * token accounting and the final progress publish below still happen.
+     *
+     * What is NOT allowed is truncating silently. A user whose run stopped at
+     * job 12 of 20 would otherwise read the remaining eight heuristic scores as
+     * considered judgements, which is exactly the "explainability over scores"
+     * failure P4 was written against.
+     */
+    const quota = await consumeLlmQuota(deps.redis, userId);
+    if (!quota.ok) {
+      quotaExhausted = true;
+      break;
+    }
+
     let results: Awaited<ReturnType<ScoreBatchDeps["scoreWithLlm"]>>["results"] = [];
 
     try {
@@ -225,6 +256,7 @@ export async function handleScoreBatch(
       }
       await upsertApplication(deps, userId, r.jobId, r.overallScore, resume.id);
       await persistRun(deps, userId, r.jobId, "cheap", { ...t0, ...r }, resume.id);
+      refinedCount += 1;
     }
   }
 
@@ -232,7 +264,13 @@ export async function handleScoreBatch(
   await publish(deps, userId, {
     phase: "done",
     scored: tier0ByJob.size,
-    refined: tier1Inputs.length,
+    // EC-P7-14 — the partial run is REPORTED, not silently truncated. `refined`
+    // is what was actually refined by the cheap model, which now differs from
+    // what was submitted when the quota cut the run short; the UI compares the
+    // two to say "12 of 20 refined, budget reached".
+    refined: refinedCount,
+    submitted: tier1Inputs.length,
+    quotaExhausted,
     tokens: { prompt: promptTokens, completion: completionTokens, model: deps.model },
   });
 }

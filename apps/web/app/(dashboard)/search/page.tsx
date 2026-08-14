@@ -14,7 +14,11 @@ interface RunState {
   status: string;
   boardResults: Record<string, BoardResult | null>;
   jobCount?: number;
+  retryCount?: number;
 }
+
+/** A run in any other state still has work in flight (EC-P7-12). */
+const TERMINAL = ["complete", "partial", "failed"];
 
 export default function SearchPage() {
   const router = useRouter();
@@ -24,6 +28,7 @@ export default function SearchPage() {
   const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<RunState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
   // EC-P2-42/43 — SSE is an optimisation. Polling the durable record runs
@@ -70,7 +75,40 @@ export default function SearchPage() {
     setRunId(d.runId);
   }
 
-  const running = run !== null && !["complete", "partial", "failed"].includes(run.status);
+  /**
+   * P7.2.1 / EC-P7-13 — retry only what failed, and only once it is finished.
+   *
+   * `setRunId(runId)` afterwards is not a no-op even though the id is unchanged:
+   * the polling effect keys on it, and it stopped when the run first reached a
+   * terminal state. Without re-arming it the retry runs and the screen never
+   * updates, which looks exactly like the retry not working.
+   */
+  async function retryFailed() {
+    if (!runId) return;
+    setRetrying(true);
+    setError(null);
+    const res = await fetch(`/api/harvest/${runId}/retry`, { method: "POST" });
+    const d = await res.json().catch(() => ({}));
+    setRetrying(false);
+    if (!res.ok) { setError(d.error ?? "Could not retry."); return; }
+
+    setRun((prev) => (prev ? { ...prev, status: "running" } : prev));
+    setRunId(null);
+    setTimeout(() => setRunId(d.runId ?? runId), 0);
+  }
+
+  const running = run !== null && !TERMINAL.includes(run.status);
+
+  /**
+   * EC-P7-12 — the retry control exists only for a terminal run with something
+   * that actually failed. Offering it mid-run invites a press that either
+   * duplicates work or is silently discarded, and both teach the user that the
+   * button lies.
+   */
+  const failedBoards = run
+    ? boards.filter((b) => run.boardResults?.[b]?.status === "failed")
+    : [];
+  const canRetry = run !== null && !running && failedBoards.length > 0;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -148,12 +186,35 @@ export default function SearchPage() {
             })}
           </ul>
 
-          {!running && (
-            <button onClick={() => router.push(`/jobs?runId=${runId}`)}
-              className="mt-4 rounded border px-4 py-2 text-sm">
-              View {run.jobCount ?? 0} jobs
-            </button>
-          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {!running && (
+              <button onClick={() => router.push(`/jobs?runId=${runId}`)}
+                className="rounded border px-4 py-2 text-sm">
+                View {run.jobCount ?? 0} jobs
+              </button>
+            )}
+
+            {/* EC-P7-13: the label names the subset, because "Retry" next to a
+                list of results that mostly succeeded reads as "run it all
+                again" — and a user who believes that will not press it. */}
+            {canRetry && (
+              <button onClick={retryFailed} disabled={retrying}
+                className="rounded border px-4 py-2 text-sm disabled:opacity-50">
+                {retrying
+                  ? "Retrying…"
+                  : `Retry ${failedBoards.length} failed board${failedBoards.length === 1 ? "" : "s"}`}
+              </button>
+            )}
+
+            {running && (
+              /* EC-P7-12 — say what is happening instead of showing a disabled
+                 retry control. A greyed-out button with no explanation reads as
+                 broken; the current state is the more useful thing to show. */
+              <span className="text-sm text-neutral-500">
+                Still searching — retry becomes available when this finishes.
+              </span>
+            )}
+          </div>
         </section>
       )}
     </main>

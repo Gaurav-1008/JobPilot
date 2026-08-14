@@ -161,6 +161,30 @@ describe("EC-P7-09 — enqueueing against a down Redis fails fast", () => {
 /* 3. The user is told which half is degraded                          */
 /* ------------------------------------------------------------------ */
 
+describe("EC-P7-14 / EC-P7-09 — the LLM quota fails OPEN", () => {
+  /**
+   * The one deliberate inversion of "fail closed" in this codebase.
+   *
+   * Everywhere else a check that cannot complete blocks. A quota is a cost
+   * control, though, and failing it closed would mean a Redis outage stops
+   * tailoring — contradicting the §18 row this file exists to protect. The
+   * worst case of failing open is a larger bill for the length of an outage;
+   * the worst case of failing closed is the product not working.
+   */
+  const brokenRedis = {
+    multi: () => ({ incrby: () => ({ expire: () => ({ exec: () => Promise.reject(new Error("ECONNREFUSED")) }) }) }),
+    get: () => Promise.reject(new Error("ECONNREFUSED")),
+    ttl: () => Promise.reject(new Error("ECONNREFUSED")),
+  } as unknown as import("ioredis").default;
+
+  it("grants the budget when Redis cannot be reached", async () => {
+    const { consumeLlmQuota, peekLlmQuota } = await import("@/lib/llm/quota");
+
+    await expect(consumeLlmQuota(brokenRedis, "u1")).resolves.toMatchObject({ ok: true });
+    await expect(peekLlmQuota(brokenRedis, "u1")).resolves.toMatchObject({ ok: true });
+  });
+});
+
 describe("EC-P7-10 — the notice names the degraded capability", () => {
   const up = (name: "redis" | "worker") => ({ name, up: true, checkedAt: 0 });
   const down = (name: "redis" | "worker") => ({ name, up: false, checkedAt: 0 });

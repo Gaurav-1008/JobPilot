@@ -124,5 +124,31 @@ const orphans = (await db.query(
   ? ok(`deleting the user removed all dependent rows (${before} outreach rows, 0 orphans)`)
   : bad(`orphans remain after user delete: outreach=${after} others=${orphans}`);
 
+/**
+ * EC-P7-25 — the object-storage worklist must SURVIVE the cascade.
+ *
+ * This is the one table that must not be cleaned up with the user, and the
+ * mistake that breaks it is a plausible one: `user_id UUID NOT NULL REFERENCES
+ * users(id) ON DELETE CASCADE` is the shape every other table in this schema
+ * uses, and adding it here would look like consistency.
+ *
+ * It would delete the worklist at exactly the moment it becomes the only record
+ * of which objects still need removing, leaving orphaned resume PDFs in the
+ * bucket with nothing in the database naming them. So the property is asserted
+ * against a real cascade rather than trusted to the DDL being read carefully.
+ */
+console.log("\nEC-P7-25 — the deletion worklist outlives the user row");
+const u2 = (await db.query(
+  `INSERT INTO users (email) VALUES ('reaper@test.dev') RETURNING id`)).rows[0].id;
+await db.query(
+  `INSERT INTO pending_object_deletions (user_id, object_key) VALUES ($1, $2)`,
+  [u2, "resume/reaper/one.pdf"]);
+await db.query(`DELETE FROM users WHERE id=$1`, [u2]);
+const surviving = (await db.query(
+  `SELECT count(*)::int n FROM pending_object_deletions WHERE user_id=$1`, [u2])).rows[0].n;
+surviving === 1
+  ? ok("queued object keys survive the cascade, so the reaper can still find them")
+  : bad(`worklist was cascaded away (${surviving} rows) — orphaned objects become unfindable`);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
