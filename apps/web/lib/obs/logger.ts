@@ -124,7 +124,8 @@ function emit(level: Level, event: string, fields: Record<string, unknown>): voi
     ...fields,
   });
 
-  // eslint-disable-next-line no-console -- stdout is the transport (see header)
+  // stdout IS the transport here — see the file header on why there is no log
+  // library. Both §17 deployment targets collect stdout and ship it.
   (level === "error" ? console.error : level === "warn" ? console.warn : console.info)(line);
 }
 

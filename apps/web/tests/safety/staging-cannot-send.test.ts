@@ -72,12 +72,21 @@ vi.mock("@/lib/db/client", () => ({
   },
 }));
 
-/** Approval is not what is under test here — grant a valid one. */
+/**
+ * Approval is not what is under test here — grant a valid one.
+ *
+ * `createHash` is imported INSIDE the async function rather than at the top of
+ * the file: `vi.mock` factories are hoisted above every import, so a top-level
+ * binding is not yet in scope when the factory is evaluated.
+ */
 vi.mock("@/lib/db/stores/review", () => ({
-  findValidReview: async () => ({
-    attemptId: ATTEMPT,
-    bodyHash: require("node:crypto").createHash("sha256").update(BODY).digest("hex"),
-  }),
+  findValidReview: async () => {
+    const { createHash } = await import("node:crypto");
+    return {
+      attemptId: ATTEMPT,
+      bodyHash: createHash("sha256").update(BODY).digest("hex"),
+    };
+  },
   reserveCapSlot: async () => ({ ok: true }),
 }));
 
