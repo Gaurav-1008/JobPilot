@@ -29,8 +29,21 @@ export function BulletChangeCard({ bullet }: BulletChangeCardProps) {
             : "border-border border-l-border",
       )}
     >
-      <div className="grid gap-2 md:grid-cols-2">
-        <div className="space-y-1">
+      {/*
+       * EC-P7-06 / P7.1.6 — side-by-side becomes stacked below `md`.
+       *
+       * The grid already did that. What it did not do was keep the two halves
+       * distinguishable once stacked: at 375px the original and the tailored
+       * text sit directly on top of one another with only an 11px uppercase
+       * label between them — legible, but not a boundary. On a screen where you
+       * cannot see both at once, "which of these am I reading" is the entire
+       * question this component exists to answer.
+       *
+       * So the stacked layout gets a rule between the halves, dropped at `md`
+       * where the columns themselves are the separation.
+       */}
+      <div className="grid gap-2 md:grid-cols-2 md:gap-4">
+        <div className="space-y-1 border-b border-border pb-2 md:border-b-0 md:pb-0">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Original
           </div>

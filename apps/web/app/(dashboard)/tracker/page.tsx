@@ -18,6 +18,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ListEmpty, ListError, ListLoading } from "@/components/ui/list-state";
+
 interface Row {
   id: string;
   status: string;
@@ -51,9 +53,21 @@ export default function TrackerPage() {
   const qc = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
 
-  const { data, isPending } = useQuery<{ applications: Row[]; pendingReview: number }>({
+  const { data, isPending, isError, refetch } = useQuery<{
+    applications: Row[];
+    pendingReview: number;
+  }>({
     queryKey: ["tracker"],
-    queryFn: async () => (await fetch("/api/tracker")).json(),
+    // EC-P7-01 — a failed request must reach the ERROR state, not the empty
+    // one. Without this throw, `.json()` on a 500 yields an object with no
+    // `applications` key, and the `?? []` below renders "No applications yet"
+    // for a server error — telling the user their tracker is empty when it is
+    // merely unreadable.
+    queryFn: async () => {
+      const res = await fetch("/api/tracker");
+      if (!res.ok) throw new Error(`tracker request failed: ${res.status}`);
+      return res.json();
+    },
   });
 
   const sweep = useMutation({
@@ -67,8 +81,30 @@ export default function TrackerPage() {
     },
   });
 
+  // P7.1.1 / EC-P7-01 — loading, error, and empty are three separate
+  // renderings, checked in that order. Sharing the first two would make a slow
+  // query indistinguishable from an empty tracker.
   if (isPending) {
-    return <main className="p-8 text-sm text-muted-foreground">Loading…</main>;
+    return (
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <ListLoading rows={4} label="Loading your tracker" />
+      </main>
+    );
+  }
+
+  if (isError) {
+    return (
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        {/* EC-P7-05 — this refetches a GET, so retrying is idempotent. The
+            follow-up sweep below is a mutation and deliberately has no retry
+            affordance of its own. */}
+        <ListError
+          onRetry={() => void refetch()}
+          title="Your tracker could not be loaded"
+          detail="The request did not complete. Every application is still recorded — this is a display problem."
+        />
+      </main>
+    );
   }
 
   const rows = data?.applications ?? [];
@@ -124,10 +160,11 @@ export default function TrackerPage() {
       </p>
 
       {rows.length === 0 && (
-        <p className="mt-8 rounded border border-border bg-card p-4 text-sm text-muted-foreground">
-          Nothing tracked yet. Applications appear here once you score or tailor
-          a job.
-        </p>
+        <ListEmpty
+          title="Nothing tracked yet"
+          detail="Applications appear here as soon as you score or tailor a job — the tracker is built from what you do, not something you fill in."
+          action={{ label: "Find jobs to score", href: "/jobs" }}
+        />
       )}
 
       <div className="mt-8 space-y-8">

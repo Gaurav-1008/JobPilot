@@ -5,6 +5,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import {
+  ListEmpty,
+  ListError,
+  ListLoading,
+  ListNoMatches,
+} from "@/components/ui/list-state";
+
 interface Job {
   id: string;
   source: string;
@@ -48,10 +55,17 @@ function JobsTable() {
   const [msg, setMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const { data: jobs, isPending } = useQuery<Job[]>({
+  const { data: jobs, isPending, isError, refetch } = useQuery<Job[]>({
     queryKey: ["jobs", runId],
-    queryFn: async () =>
-      (await (await fetch(`/api/jobs${runId ? `?runId=${runId}` : ""}`)).json()).jobs ?? [],
+    queryFn: async () => {
+      // EC-P7-01 — a failed fetch must reach the ERROR state, not the empty
+      // one. `.json()` on a 500 yields an object with no `jobs` key, and the
+      // `?? []` below then renders "No jobs yet" for a server error: the user
+      // is told their data is gone when the request simply failed.
+      const res = await fetch(`/api/jobs${runId ? `?runId=${runId}` : ""}`);
+      if (!res.ok) throw new Error(`jobs request failed: ${res.status}`);
+      return (await res.json()).jobs ?? [];
+    },
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["jobs", runId] });
@@ -101,13 +115,64 @@ function JobsTable() {
   const lowFitCount = all.filter((j) => j.score !== null && j.score <= LOW_FIT_MAX).length;
   const hydratedCount = all.filter((j) => j.hydrationStatus === "hydrated").length;
 
-  if (isPending) return <p className="mt-8 text-sm text-neutral-500">Loading…</p>;
+  /*
+   * P7.1.1 / EC-P7-01 — four distinct states, in priority order, sharing no
+   * component. Order is the substance here: `all.length === 0` is also true
+   * while the query is in flight, so checking it before `isPending` renders
+   * "No jobs yet — run a search" over a request that is about to return jobs.
+   * On a slow connection the user is told their board is empty and starts a
+   * second search.
+   *
+   * EC-P7-05 — retry here refetches a GET, which is idempotent. The mutations
+   * on this screen (hydrate, score) deliberately do NOT get a retry
+   * affordance: they may have succeeded server-side and failed on the way
+   * back, so retrying would enqueue the work twice.
+   */
+  if (isPending) return <ListLoading rows={5} label="Loading jobs" />;
+
+  if (isError) {
+    return (
+      <ListError
+        onRetry={() => void refetch()}
+        title="Your jobs could not be loaded"
+        detail="The request did not complete. Nothing has been lost — this is a display problem."
+      />
+    );
+  }
+
   if (all.length === 0) {
     return (
-      <p className="mt-8 text-sm text-neutral-500">
-        No jobs yet. <Link href="/search" className="underline">Run a search</Link> to
-        populate the board.
-      </p>
+      <>
+        <ListEmpty
+          title="No jobs yet"
+          detail="Run a search and JobPilot harvests matching roles from the boards you pick."
+          action={{ label: "Run a search", href: "/search" }}
+        />
+
+        {/*
+         * P7.1.4 / EC-P7-03 — the sample is OFFERED, never seeded on signup.
+         *
+         * Seeding automatically would mean doing work for every account
+         * created, including the ones that never come back. Offering it here
+         * means only users who want the demonstration pay for it — and because
+         * it comes from fixtures, "paying for it" costs three inserts rather
+         * than three requests to real job boards.
+         */}
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Not ready to search?{" "}
+          <button
+            onClick={async () => {
+              await fetch("/api/onboarding/sample", { method: "POST" });
+              void refresh();
+            }}
+            className="underline"
+          >
+            Load three sample jobs
+          </button>{" "}
+          — clearly labelled, removable in one click, and never used as your
+          default resume.
+        </p>
+      </>
     );
   }
 
@@ -144,13 +209,16 @@ function JobsTable() {
       </div>
       {msg && <p role="status" className="mt-2 text-sm text-neutral-700">{msg}</p>}
 
+      {/* EC-P7-02 — "no jobs" and "no jobs match" are different sentences with
+          different next actions, and this is the branch that keeps them apart.
+          Reaching here means `all.length > 0`, so the data exists and only the
+          filters are hiding it. */}
       {shown.length === 0 ? (
-        <p className="mt-8 text-sm text-neutral-500">
-          No jobs match these filters.{" "}
-          <button onClick={() => { setSource("all"); setBand("all"); }} className="underline">
-            Clear
-          </button>
-        </p>
+        <ListNoMatches
+          total={all.length}
+          noun="jobs"
+          onClear={() => { setSource("all"); setBand("all"); }}
+        />
       ) : (
         <ul className="mt-4 divide-y rounded border">
           {shown.map((j) => (
