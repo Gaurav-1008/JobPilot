@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireSession } from "@/lib/auth/session";
-import { createHarvestRun } from "@/lib/db/stores/harvest";
-import { enqueueHarvest } from "@/lib/queue/producer";
+import { createHarvestRun, failUnqueuedRun } from "@/lib/db/stores/harvest";
+import { enqueueHarvest, QueueUnavailableError } from "@/lib/queue/producer";
 import { toErrorResponse, BadRequestError } from "@/lib/api-errors";
 
 export const runtime = "nodejs";
@@ -36,7 +36,22 @@ export async function POST(request: Request) {
 
     const run = await createHarvestRun({ userId, role, location, boards });
 
-    await enqueueHarvest({ runId: run.id, userId, role, location, boards, limit });
+    try {
+      await enqueueHarvest({ runId: run.id, userId, role, location, boards, limit });
+    } catch (err) {
+      // EC-P7-12 — the row exists but nothing will ever process it. Left
+      // `queued`, it is a permanently non-terminal run: the tracker shows it as
+      // in progress, and the retry control correctly refuses to offer a retry
+      // for a job that is still running. Marking it failed is what makes it
+      // retryable once Redis is back.
+      if (err instanceof QueueUnavailableError) {
+        await failUnqueuedRun(
+          run.id,
+          "The queue was unreachable, so this search never started.",
+        );
+      }
+      throw err;
+    }
 
     return NextResponse.json({ runId: run.id }, { status: 202 });
   } catch (err) {

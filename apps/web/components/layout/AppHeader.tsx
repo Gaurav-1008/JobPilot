@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Wand2 } from "lucide-react";
 
+import { DegradationBanner } from "@/components/layout/DegradationBanner";
 import { SignOutButton } from "@/components/SignOutButton";
 
 /**
@@ -98,6 +99,12 @@ export async function AppHeader() {
           </nav>
         )}
       </div>
+
+      {/* P7.2.4 — only rendered for a signed-in user. A visitor on the marketing
+          page has no use for "harvesting is paused", and polling health for
+          them would put load on the dependencies on behalf of someone who is
+          not using them. */}
+      {session && <DegradationBanner />}
     </header>
   );
 }

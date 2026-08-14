@@ -24,6 +24,31 @@ export async function createHarvestRun(input: {
   });
 }
 
+/**
+ * Close out a run that was recorded but never queued (P7.2.4, EC-P7-12).
+ *
+ * The route writes the run row first, then enqueues. If the enqueue fails —
+ * Redis unreachable — the row is left `queued` with nothing in existence that
+ * will ever pick it up. To the tracker that is a job in progress, so the retry
+ * UI correctly refuses to offer a retry for a non-terminal run, and the user
+ * watches a spinner for a run that cannot advance.
+ *
+ * Moving it to `failed` with a stated reason makes it terminal, which is what
+ * makes it retryable. The ordering (row first, then queue) stays as it was: it
+ * is the EC-P1-25 pattern, and a row with no job is recoverable, while a job
+ * with no row is not.
+ */
+export async function failUnqueuedRun(id: string, reason: string) {
+  return prisma.harvestRun.updateMany({
+    where: { id, status: "queued" },
+    data: {
+      status: "failed",
+      finishedAt: new Date(),
+      boardResults: [{ board: "all", status: "failed", reason }],
+    },
+  });
+}
+
 /** EC-P1-26: a foreign id resolves to null, so the route 404s rather than 403s. */
 export async function getHarvestRun(id: string, userId: string) {
   const run = await prisma.harvestRun.findFirst({
