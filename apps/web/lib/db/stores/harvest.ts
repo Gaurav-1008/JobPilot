@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "../client";
+import { advanceApplicationStatus } from "./tracker";
 
 export async function createHarvestRun(input: {
   userId: string; role: string; location: string | null; boards: string[];
@@ -224,8 +225,21 @@ export async function finaliseTailoredScore(input: {
 }) {
   const app = await prisma.application.upsert({
     where: { userId_jobId: { userId: input.userId, jobId: input.jobId } },
+    /**
+     * EC-P6-02 — the UPDATE branch must NOT set status.
+     *
+     * It used to write `status: "tailored"` unconditionally, so re-tailoring an
+     * application that had already reached `emailed` dragged it backwards, and
+     * a manual `rejected` was erased outright (EC-P6-01). The edge case names
+     * this exact scenario, and it happened on real data during the Phase 6
+     * audit: an emailed application showed as `tailored` again after a second
+     * tailoring run.
+     *
+     * Re-tailoring updates the scores and the active run — which is the point
+     * of doing it — and leaves the funnel position to
+     * `advanceApplicationStatus` below, which only ever moves forward.
+     */
     update: {
-      status: "tailored",
       originalScore: input.originalScore,
       tailoredScore: input.tailoredScore,
       resumeId: input.resumeId,
@@ -240,6 +254,10 @@ export async function finaliseTailoredScore(input: {
       activeTailoringRunId: input.runId,
     },
   });
+
+  // Advance the funnel through the one writer that knows the rules: forward
+  // only, and never over a status a human set deliberately (EC-P6-01/02).
+  await advanceApplicationStatus(app.id, input.userId, "tailored");
 
   // The run was created by the orchestrator store without an application (a
   // Phase 1 standalone run); attach it now that one exists.

@@ -227,9 +227,15 @@ async function upsertApplication(
 ) {
   // EC-P4-15/23 — ON CONFLICT DO UPDATE, not DO NOTHING. DO NOTHING silently
   // keeps a stale score from an earlier run.
+  //
+  // EC-P6-02 — the UPDATE branch deliberately does NOT touch status. Re-running
+  // a harvest must refresh the SCORE without dragging an application backwards
+  // down the funnel: re-scoring something already emailed, or manually marked
+  // rejected, would otherwise reset it to `scored` and erase the record the
+  // user was keeping. Only a brand-new row starts at `scored`.
   await deps.prisma.application.upsert({
     where: { userId_jobId: { userId, jobId } },
-    update: { originalScore: score, resumeId, status: "scored" },
+    update: { originalScore: score, resumeId },
     create: { userId, jobId, originalScore: score, resumeId, status: "scored" },
   });
 }

@@ -719,16 +719,59 @@ email rather than the safety of delivering it, and neither blocks Phase 6.
 
 ### Acceptance criteria
 
+A box is ticked only where an automated test or live data proves it.
+
 - [ ] Five real jobs visible on one screen with scores, resume versions, and outreach history
-- [ ] Statuses advance automatically as the pipeline runs
+- [x] Statuses advance automatically as the pipeline runs
 - [ ] A follow-up appears in the review queue and requires the same approval to send
 - [ ] The bundle opens and contains PDFs, log, and summary
-- [ ] Legacy CSVs import without duplicating existing rows
+- [x] Legacy CSVs import without duplicating existing rows
+
+**Where the ticks come from.** `tests/tracker/status-machine.test.ts` (12) and
+`tests/tracker/followup-rules.test.ts` (14) cover the transition rules and the
+sweep's selection; `tests/export/bundle.test.ts` (9) covers the artifact;
+`tests/safety/followup-cannot-send.test.ts` (6) covers EC-P6-13 and is
+mutation-verified. Automatic advancement is also demonstrated on live data —
+this account's application moved `contact_added → emailed` on delivery.
+
+**What the three open boxes still need:**
+
+| Box | Blocked on |
+|-----|-----------|
+| Five jobs on one screen | Volume, not capability. The tracker renders one real application today with its score, resume version and seven attempts; the criterion asks for five, which needs a live harvest and scoring run. |
+| Follow-up in the review queue | Nothing is eligible yet, correctly. The sweep keys off `outreach_attempts.status='sent'` (EC-P6-11) and this account's only delivery is a Gmail **draft** — following up on an unsent email is the failure that rule exists to prevent. Needs a real send, then seven days. |
+| Bundle contains PDFs | **Genuinely incomplete.** The bundle ships README + outreach log + applications CSV. The side-by-side and tailored-resume PDFs are not in it; EC-P6-26 puts the PDF-bearing variant on the queue at a 3-minute timeout, and only the fast CSV bundle is built. |
+
+**A bug this audit found, on live data.** An application that had reached
+`emailed` was showing as `tailored` again. `finaliseTailoredScore` wrote
+`status: "tailored"` unconditionally on its UPDATE branch, so re-tailoring
+dragged the funnel backwards — EC-P6-02 exactly, and a manually set `rejected`
+would have been erased the same way (EC-P6-01). The same shape was present in
+`score-batch.ts`, where a re-harvest would have reset an emailed application to
+`scored`. Both now update scores and the active run while leaving the funnel
+position to the single writer that knows the rules. The affected row was
+repaired from the evidence — a draft exists, so `emailed` is the truth.
 
 ### Exit gate → Phase 7
 
 - [ ] Every §16 acceptance criterion from [`problemStatement.md`](./problemStatement.md) is demonstrable
-- [ ] The sweep has no code path to `/deliver`
+- [x] The sweep has no code path to `/deliver`
+
+§16 stands at roughly 8 of 12. Demonstrated end to end on live data: tailoring
+with bullet-level reasons (5), a contact with auto-filled company and role (7),
+an email whose personalization cites the tailoring run (8), a real Gmail draft
+(9), dedup suppression blocking a second email to the same person (11), and an
+audit trail recording all seven attempts including four refusals (12). The
+tracker (10) is built and renders real data.
+
+Open: §16.2 and §16.3 and §16.4 — deduplicated results from two or more boards,
+a job hydrated with no manual copy-paste, and every hydrated job scored. All
+three need a live harvest against real boards, which nothing in the test suite
+can stand in for.
+
+The sweep item is asserted by a test that reads the source and fails on any
+import of the interlock chain or the delivery client, verified by mutation:
+adding the delivery import and writing `status: 'sent'` trips three assertions.
 
 ---
 
