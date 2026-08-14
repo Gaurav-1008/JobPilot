@@ -55,17 +55,26 @@ export interface CoverageResult {
   pct: number;
 }
 
-/** Which of `items` are evidenced in the corpus. */
-export function coverage(corpus: string, items: string[]): CoverageResult {
+/**
+ * Which of `items` are evidenced in the corpus.
+ *
+ * `items` is optional rather than required-and-trusted. A JobDescription
+ * profile can legitimately be partial — the hydrate handler writes `{}` when it
+ * saves raw text before extraction succeeds — and a missing array threw
+ * "items is not iterable" from deep inside the scorer, which failed an entire
+ * batch rather than the one row that caused it.
+ */
+export function coverage(corpus: string, items?: string[] | null): CoverageResult {
   const matched: string[] = [];
   const missing: string[] = [];
-  for (const item of items) {
+  for (const item of items ?? []) {
     if (corpusIncludes(corpus, item)) matched.push(item);
     else missing.push(item);
   }
-  const pct = items.length
-    ? Math.round((matched.length / items.length) * 100)
-    : 100;
+  // Nothing asked for is 100% covered — the same rule an empty array already
+  // had, now reached by a missing one too.
+  const total = matched.length + missing.length;
+  const pct = total ? Math.round((matched.length / total) * 100) : 100;
   return { matched, missing, pct };
 }
 

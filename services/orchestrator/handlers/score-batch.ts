@@ -106,9 +106,32 @@ export async function handleScoreBatch(
   /* ---------------- Tier 0: every job, zero tokens ---------------- */
   for (const job of jobs) {
     const jd = job.jobDescription?.profile as never;
-    if (!jd) continue;
+    /**
+     * `!jd` catches null. It does NOT catch `{}`, which is truthy — and an
+     * empty object is exactly what the hydrate handler writes when it saves
+     * raw text before extraction, and what a manual paste wrote before Phase 6.
+     * Such a row reached scoreTier0, where `coverage(corpus, undefined)` threw
+     * "items is not iterable".
+     */
+    if (!jd || Object.keys(jd).length === 0) continue;
 
-    const t0 = scoreTier0(resumeProfile, jd);
+    /**
+     * EC-P2-04's rule, which harvest honours and this loop did not: ONE ROW
+     * FAILING MUST NOT LOSE THE OTHERS. That single throw above aborted the
+     * whole batch job, so 21 hydrated jobs produced zero scores and the only
+     * evidence was "items is not iterable" in the queue's failure record.
+     */
+    let t0: ReturnType<typeof scoreTier0>;
+    try {
+      t0 = scoreTier0(resumeProfile, jd);
+    } catch (err) {
+      console.error(JSON.stringify({
+        event: "score.tier0_failed",
+        jobId: job.id,
+        error: err instanceof Error ? err.message : String(err),
+      }));
+      continue;
+    }
     tier0ByJob.set(job.id, t0);
 
     // EC-P4-20 — resumeId is recorded so the UI can say "scored against v2,
