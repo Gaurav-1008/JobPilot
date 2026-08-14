@@ -180,12 +180,28 @@ function JobsTable() {
               </div>
 
               <div className="min-w-0 flex-1">
-                <Link href={`/jobs/${j.id}`} className="font-medium hover:underline">
+                {/* Styled as a link, not just behaving like one. This was
+                    `font-medium hover:underline` — indistinguishable from a
+                    heading until the pointer happened to land on the text, so
+                    the way into a job (and to the paste box, the only route for
+                    a description automation could not fetch) was invisible. */}
+                <Link
+                  href={`/jobs/${j.id}`}
+                  className="font-medium text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary"
+                >
                   {j.title}
                 </Link>
                 <div className="text-sm text-neutral-600">
                   {j.company}{j.location && ` · ${j.location}`}
                 </div>
+                <Link
+                  href={`/jobs/${j.id}`}
+                  className="mt-1 inline-block text-xs text-muted-foreground underline"
+                >
+                  {j.hydrationStatus === "hydrated"
+                    ? "Open · view requirements"
+                    : "Open · paste the description"}
+                </Link>
                 {j.explanation && (
                   <p className="mt-1 text-xs text-neutral-500">{j.explanation}</p>
                 )}
