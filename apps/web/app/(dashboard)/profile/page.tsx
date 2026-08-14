@@ -68,13 +68,37 @@ export default function ProfilePage() {
             />
           </label>
         ))}
+        {/* This field is not a bio. It is interpolated into ONE sentence of
+            every outreach email, and a pasted résumé summary produces both a
+            broken sentence and a body far over the 150-word limit — which the
+            interlock chain then refuses to send, with the failure only visible
+            after approval. Saying what it is for costs one line here and saves
+            that entire loop. */}
         <label className="block">
           <span className="text-sm">Background</span>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            A short phrase, not a bio — it is dropped into the sentence “I’m{" "}
+            {p.candidateName?.trim() || "NAME"}, with a background in …” in
+            every email you send. Something like “backend systems and retrieval
+            pipelines” reads well; a pasted résumé summary does not.
+          </span>
           <textarea
-            rows={3} value={p.candidateBackground ?? ""}
+            rows={2}
+            maxLength={200}
+            placeholder="backend systems and retrieval pipelines"
+            value={p.candidateBackground ?? ""}
             onChange={(e) => setP({ ...p, candidateBackground: e.target.value })}
-            className="mt-1 w-full rounded border px-3 py-2"
+            className="mt-2 w-full rounded border px-3 py-2"
           />
+          <span
+            className={`mt-1 block text-xs ${
+              (p.candidateBackground ?? "").length > 160
+                ? "text-amber-600"
+                : "text-muted-foreground"
+            }`}
+          >
+            {(p.candidateBackground ?? "").length}/200 characters
+          </span>
         </label>
         <div className="flex items-center gap-3">
           <button type="submit" className="rounded bg-black px-4 py-2 text-white">Save</button>

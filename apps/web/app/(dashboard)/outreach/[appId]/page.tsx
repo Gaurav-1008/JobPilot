@@ -215,6 +215,21 @@ export default function ReviewPage({
   const blocking = (draft?.findings ?? []).filter((f) => f.severity === "block");
   const flags = (draft?.findings ?? []).filter((f) => f.severity === "flag");
 
+  /**
+   * Over the word limit means the send is IMPOSSIBLE, not merely inadvisable.
+   *
+   * Grounding reports word count as a soft flag, which put it under "Worth
+   * checking" — but interlock check 8 refuses outright at delivery. So the
+   * screen invited approval of something the server would never send, and the
+   * only feedback was a `failed` row after the fact. Approving three times and
+   * finding nothing in your mailbox is the exact experience that produces.
+   *
+   * The block is surfaced here instead, and Approve is disabled until the text
+   * fits. Editing stays available, because shortening the body is the fix.
+   */
+  const overLimit =
+    draft !== undefined && draft.wordCount > draft.wordLimit;
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <Link href="/outreach" className="text-sm underline text-muted-foreground">
@@ -277,6 +292,27 @@ export default function ReviewPage({
       {draft && (
         <>
           {/* ── Guardrail findings ───────────────────────────────────── */}
+          {overLimit && (
+            <section className="mt-6 rounded border border-red-300 bg-red-50 p-4">
+              <h2 className="text-sm font-medium text-red-900">
+                Too long to send — {draft.wordCount} words, limit {draft.wordLimit}
+              </h2>
+              <p className="mt-2 text-sm text-red-900">
+                This will be refused at send time, so approving it cannot help.
+                Shorten the body below and save, and the limit check clears.
+              </p>
+              <p className="mt-2 text-xs text-red-800">
+                Long emails usually mean the background on your{" "}
+                <Link href="/profile" className="underline">
+                  profile
+                </Link>{" "}
+                is a full bio. It gets dropped into one sentence — “I’m NAME,
+                with a background in …” — so a short phrase works far better
+                than a paragraph.
+              </p>
+            </section>
+          )}
+
           {blocking.length > 0 && (
             <section className="mt-6 rounded border border-red-300 bg-red-50 p-4">
               <h2 className="text-sm font-medium text-red-900">
@@ -380,7 +416,7 @@ export default function ReviewPage({
               </button>
               <button
                 onClick={approve}
-                disabled={busy || dirty || approved}
+                disabled={busy || dirty || approved || overLimit}
                 className="rounded border px-4 py-2 text-sm disabled:opacity-50"
               >
                 {approved ? "Approved" : "Approve"}
