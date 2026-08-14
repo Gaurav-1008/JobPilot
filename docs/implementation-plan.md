@@ -576,7 +576,7 @@ satisfied by reading the code.
 - [x] Opt-out recipient → blocked, `failed` row with reason `opt_out`
 - [x] Second email to the same contact → blocked by dedup
 - [x] With `DRY_RUN=true`, a full send attempt opens no sockets and still logs
-- [ ] With `DRY_RUN=false` + valid OAuth → real Gmail draft appears, `provider_message_id` stored
+- [x] With `DRY_RUN=false` + valid OAuth → real Gmail draft appears, `provider_message_id` stored
 - [x] Removing `GROQ_API_KEY` → template path, everything still works
 - [x] All eight P5.6 tests green
 
@@ -594,19 +594,40 @@ satisfied by reading the code.
 - `services/python/tests/test_delivery_safety.py` (10) — dry run at the socket
   layer, credential redaction, and the template fallback.
 
-**What the three open boxes still need:**
+**The live draft, verified end to end (2026-08-14).** Against real Google OAuth,
+a real encryption key, and `DRY_RUN=false`:
+
+```
+status             : drafted
+provider           : gmail_api
+providerMessageId  : r-4695525824728658568
+providerAttemptedAt: 2026-08-14T00:48:17.638Z
+errorMessage       : (none)
+application        : AI Engineer -> emailed
+tokens             : 5 minted, exactly 1 burned
+```
+
+Four earlier attempts were refused by the chain and are worth recording,
+because they are the interlocks working rather than anecdotes: three at check 8
+(262 words against the 150 limit, caused by a résumé summary pasted into the
+profile background field, which the template interpolates into one sentence)
+and one at check 12 (`send_mode='send'` against a `gmail.compose` grant —
+EC-P5-65 catching the mismatch before contacting Google). Every one wrote a
+`failed` row naming its check, left `provider_attempted_at` null, and left its
+approval token unburned.
+
+**What the two remaining boxes still need:**
 
 | Box | Blocked on |
 |-----|-----------|
-| Hook cites a matched skill | A live LLM generation. The template path cites no skills by design, so this cannot be shown without `GROQ_API_KEY` exercised end to end. |
-| Evidence panel | Built and typechecked; needs one look in a browser against a real tailoring run. |
-| Real Gmail draft | `ENCRYPTION_KEY` and `GOOGLE_CLIENT_ID`/`SECRET` are unset, so no credential can be stored and check 11 blocks every real send. Correct fail-closed behavior, not a defect. |
+| Hook cites a matched skill | The delivered email came from the TEMPLATE path, which cites no skills by design, so this is still unproven. A full `tier='full'` run exists and the payload was non-null, so the input is there — ④'s validator rejected the LLM draft and fell back. Worth chasing: with the long background it was over the word limit (EC-P5-30), and that has since been fixed. |
+| Evidence panel | A full tailoring run now backs it, so the panel renders real payload rather than the EC-P5-40 empty state. Still wants one deliberate look in a browser rather than an inference from the data. |
 
 ### Exit gate → Phase 6
 
 - [x] Every §19 safety test passes
 - [x] Grep confirms no bulk-send code path exists anywhere
-- [ ] A self-addressed live draft was created and verified in Gmail
+- [x] A self-addressed live draft was created and verified in Gmail
 - [x] Credentials appear in no log line, no trace, no error body
 
 The last credential item was checked the way EC-P5-61 asks: a 422 was forced out
@@ -615,8 +636,11 @@ password. FastAPI's default handler echoes the offending value in `input`, which
 on `/email/deliver` is an app password — so this passes only because both ④ and
 ① redact, and it would regress the moment either side stopped.
 
-**Phase 5 is not closed.** One exit-gate item remains, and it is the one that
-proves the phase actually delivers mail rather than merely refusing to.
+**The exit gate is closed.** All four items pass, including the one that proves
+the phase delivers mail rather than merely refusing to.
+
+Two acceptance criteria remain open, both about the QUALITY of a generated
+email rather than the safety of delivering it, and neither blocks Phase 6.
 
 ---
 
