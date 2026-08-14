@@ -71,7 +71,9 @@ export async function PATCH(request: Request) {
       if (!credential.preflightOk) {
         throw new BadRequestError(
           "Your sending account has not passed its connection check. " +
-            "Re-save it to retry, then turn dry run off.",
+            // Not "re-save it": that only ever applied to SMTP, and told
+            // Google users to redo an OAuth round-trip to retry a health check.
+            "Run the connection check again below, then turn dry run off.",
         );
       }
     }

@@ -200,6 +200,56 @@ function SettingsScreen() {
 }
 
 /**
+ * Re-run the connection check on the stored credential (P5.5.2).
+ *
+ * Exists because the check used to run exactly once, when the credential was
+ * saved. A failure there for a reason unrelated to the credential — the email
+ * service being down at that moment — left a perfectly good account marked
+ * unverified forever, with the only escape being a full reconnect. For Google
+ * that meant redoing the OAuth consent screen to retry a health check.
+ */
+function VerifyButton() {
+  const qc = useQueryClient();
+  const [result, setResult] = useState<string | null>(null);
+
+  const verify = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/outreach/credentials/verify", {
+        method: "POST",
+      });
+      return (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        reason?: string | null;
+        error?: string;
+      };
+    },
+    onSuccess: (body) => {
+      setResult(
+        body.ok
+          ? "Connection check passed. You can turn dry run off now."
+          : (body.reason ?? body.error ?? "The check did not pass."),
+      );
+      void qc.invalidateQueries({ queryKey: ["outreach-settings"] });
+    },
+  });
+
+  return (
+    <>
+      <button
+        onClick={() => verify.mutate()}
+        disabled={verify.isPending}
+        className="rounded border px-4 py-2 text-sm disabled:opacity-50"
+      >
+        {verify.isPending ? "Checking…" : "Run connection check"}
+      </button>
+      {result && (
+        <p className="basis-full text-xs text-muted-foreground">{result}</p>
+      )}
+    </>
+  );
+}
+
+/**
  * Google account connection (P5.5.3).
  *
  * The two levels of access are separate buttons with the difference spelled
@@ -256,7 +306,15 @@ function GoogleAccount({
               ? "drafts and direct sending authorized"
               : "drafts only"}
           </p>
+          {!credential.preflightOk && (
+            <p className="mt-2 text-xs text-amber-600">
+              The connection check has not passed, so nothing can be sent yet.
+              This is often just the email service having been unreachable at
+              the moment you connected — run the check again below.
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
+            <VerifyButton />
             {!credential.canSend && (
               <>
                 {/* eslint-disable-next-line @next/next/no-html-link-for-pages --
