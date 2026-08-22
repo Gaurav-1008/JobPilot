@@ -32,8 +32,67 @@ const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", 
 // built for many short-lived serverless connections and drops idle ones; this
 // is a PERSISTENT worker, which is the opposite shape. Using the pooled URL is
 // what produced the P1017 "Server has closed the connection" crash below.
+//
+// ═════════════════════════════════════════════════════════════════════════
+// THE POOL IS SIZED EXPLICITLY, AND THIS IS WHY.
+//
+// Prisma's default pool is `num_cpus * 2 + 1` — 17 on an 8-core laptop. That
+// default is written for an app server talking to its own database, and both
+// halves of the assumption are wrong here:
+//
+//   · Session mode (:5432) means a pool slot maps to a Supavisor session
+//     holding a real backend for its lifetime. Nothing multiplexes them. The
+//     web app's :6543 transaction-mode pool does not behave this way, which
+//     is why it is not the half that pressures the instance.
+//   · This process runs BullMQ at concurrency 4. It can never use 17.
+//
+// Prisma opens connections lazily, so an IDLE worker holds one or two, not
+// seventeen. The exposure is under load, and against a Supabase instance
+// reporting max_connections = 60 — shared with PostgREST, pg_cron, pg_net and
+// the rest — a worker able to claim 17 on demand is a large share of the
+// instance for work that is bounded at 4.
+//
+// HONEST SCOPE: this is hygiene, not a fix for the "Can't reach database
+// server" errors that prompted it. Those were the POOLER being briefly
+// unavailable — Postgres itself stayed up throughout, and both URLs answered
+// normally minutes later. What an oversized pool did do was make that outage
+// louder than it needed to be: 17 slots filled with retrying connection
+// attempts, and the follow-on "Timed out fetching a new connection from the
+// connection pool" is that exhaustion, downstream of the real cause.
+//
+// Sized at concurrency + 2: one slot per in-flight job, plus headroom for the
+// reaper and `finaliseRun`. Raising ORCHESTRATOR_CONCURRENCY raises this with
+// it, so the two cannot drift apart.
+// ═════════════════════════════════════════════════════════════════════════
+const CONCURRENCY = Number(process.env.ORCHESTRATOR_CONCURRENCY ?? 4);
+
+/** Add pool sizing to a Postgres URL without clobbering existing params. */
+function withPoolLimits(raw: string, limit: number): string {
+  const url = new URL(raw);
+  // Only set what the operator has not already chosen deliberately.
+  if (!url.searchParams.has("connection_limit")) {
+    url.searchParams.set("connection_limit", String(limit));
+  }
+  if (!url.searchParams.has("pool_timeout")) {
+    // Longer than the 10s default: a board handler can hold its slot through a
+    // slow scrape, and failing the queue job for that is worse than waiting.
+    url.searchParams.set("pool_timeout", "20");
+  }
+  return url.toString();
+}
+
+const dbUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+if (!dbUrl) {
+  // Fail at boot rather than on the first job (P7.4.4 / EC-P7-28).
+  console.error(JSON.stringify({
+    event: "config.invalid",
+    error: "Neither DIRECT_URL nor DATABASE_URL is set; the orchestrator cannot start.",
+  }));
+  process.exit(1);
+}
+
 const prisma = new PrismaClient({
-  datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
+  datasources: { db: { url: withPoolLimits(dbUrl, CONCURRENCY + 2) } },
 });
 const queue = new Queue(QUEUE_NAME, { connection });
 
@@ -155,7 +214,8 @@ const worker = new Worker(
     connection,
     // EC-P2-35: per-board concurrency is enforced by the Redis limiter, not by
     // this number. This only bounds total in-flight work in one replica.
-    concurrency: Number(process.env.ORCHESTRATOR_CONCURRENCY ?? 4),
+    // Same constant the Prisma pool is sized from, so the two cannot drift.
+    concurrency: CONCURRENCY,
   },
 );
 
@@ -189,26 +249,78 @@ console.log(JSON.stringify({ event: "orchestrator.ready", queue: QUEUE_NAME }));
  * that; until then, ③ needs a supervisor that restarts it.
  */
 const REAP_AFTER_MIN = 10;
-setInterval(() => {
-  void (async () => {
-    try {
-      const cutoff = new Date(Date.now() - REAP_AFTER_MIN * 60_000);
-      const stale = await prisma.harvestRun.updateMany({
-        where: { status: "running", startedAt: { lt: cutoff } },
-        data: { status: "failed", finishedAt: new Date() },
-      });
-      if (stale.count > 0) {
-        console.log(JSON.stringify({ event: "stale.reaped", count: stale.count }));
+const REAP_INTERVAL_MS = 60_000;
+/** Give up escalating the backoff here — 16 minutes between attempts. */
+const REAP_MAX_BACKOFF = 16;
+
+/**
+ * Consecutive failures, driving both the backoff and the log volume.
+ *
+ * Two problems this fixes, both observed against a real Supabase instance:
+ *
+ * 1. NO BACKOFF. A reaper that retries every 60s through an outage adds load
+ *    to a database that is already struggling, and when the cause is
+ *    connection exhaustion — which it was — the retry is a participant in the
+ *    problem rather than an observer of it.
+ *
+ * 2. IDENTICAL LINES FOREVER. Six copies of the same multi-line Prisma error
+ *    is not six pieces of information. It is one, repeated until the operator
+ *    stops reading the log — the same way an undifferentiated
+ *    `interlock_block_total` gets muted (EC-P7-21). So the first failure logs
+ *    in full, subsequent ones log a count, and recovery logs once.
+ */
+let reapFailures = 0;
+
+function scheduleReap(delayMs: number): void {
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const cutoff = new Date(Date.now() - REAP_AFTER_MIN * 60_000);
+        const stale = await prisma.harvestRun.updateMany({
+          where: { status: "running", startedAt: { lt: cutoff } },
+          data: { status: "failed", finishedAt: new Date() },
+        });
+
+        if (reapFailures > 0) {
+          console.log(JSON.stringify({
+            event: "reaper.recovered",
+            afterFailures: reapFailures,
+          }));
+          reapFailures = 0;
+        }
+        if (stale.count > 0) {
+          console.log(JSON.stringify({ event: "stale.reaped", count: stale.count }));
+        }
+      } catch (err) {
+        // A database blip must not take the worker down with it.
+        reapFailures += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        if (reapFailures === 1) {
+          console.error(JSON.stringify({
+            event: "reaper.failed",
+            // First line only. Prisma renders a code frame across a dozen
+            // lines, and repeating that per attempt is what made this
+            // unreadable in the first place.
+            error: message.split("\n").find((l) => l.trim()) ?? message,
+          }));
+        } else {
+          console.error(JSON.stringify({
+            event: "reaper.failing",
+            consecutive: reapFailures,
+          }));
+        }
+      } finally {
+        // Exponential backoff, capped. Rescheduled from `finally` so a throw
+        // anywhere above cannot stop the reaper permanently — which would be
+        // worse than the noise, since nothing else marks a run stale.
+        const factor = Math.min(2 ** Math.min(reapFailures, 4), REAP_MAX_BACKOFF);
+        scheduleReap(REAP_INTERVAL_MS * (reapFailures === 0 ? 1 : factor));
       }
-    } catch (err) {
-      // A database blip must not take the worker down with it.
-      console.error(JSON.stringify({
-        event: "reaper.failed",
-        error: err instanceof Error ? err.message : String(err),
-      }));
-    }
-  })();
-}, 60_000);
+    })();
+  }, delayMs).unref?.();
+}
+
+scheduleReap(REAP_INTERVAL_MS);
 
 /**
  * Last line of defence. A single failed async operation anywhere must not kill
