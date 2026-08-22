@@ -16,6 +16,24 @@
     "today, so this only mattered the first time someone forgot."
   ],
 
+  "//paths": [
+    "`paths` WITHOUT `baseUrl`, which TypeScript has supported since 4.1 and",
+    "which apps/web/tsconfig.json already relied on. Entries resolve relative to",
+    "this file instead, so `./apps/web/*` means the same thing it did before.",
+    "",
+    "baseUrl did two jobs and only one was wanted. Anchoring `paths` is the job",
+    "it kept. The other was making every directory under the repo root a lookup",
+    "root for BARE specifiers, so `import x from \"apps/web/lib/llm/client\"`",
+    "would have resolved — a second spelling for every aliased module, shadowing",
+    "node_modules on any name collision. Nothing imports that way (every",
+    "orchestrator import is relative or a real package), so the capability was",
+    "only ever a way to introduce an ambiguity later.",
+    "",
+    "The alias is load-bearing regardless: the orchestrator reaches apps/web by",
+    "relative path, but those modules import `@/lib/schemas` and friends among",
+    "themselves, and tsx resolves those through the mapping below."
+  ],
+
   "//include": [
     "`scripts/**/*.mjs` used to be listed below and did NOTHING. TypeScript",
     "ignores .js and .mjs unless allowJs is on, so `tsc --listFiles` reported",
@@ -40,7 +58,6 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./apps/web/*"]
     }
