@@ -74,3 +74,9 @@ Thumbs.db
 *-tmp.mts
 *-tmp.js
 *-tmp.ts
+
+# Added by `vercel link`. The CLI also appended a blanket `.env*`, which is
+# removed: `.env` + `.env.*` above already cover .env.local, and `.env*` sorted
+# last silently overrode the `!.env.example` exception at the top of this file —
+# so a template for any NEW service would never have been committable.
+.vercel
