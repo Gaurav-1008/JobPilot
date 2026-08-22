@@ -9,10 +9,22 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { safeNextPath } from "@/lib/auth/next-path";
 
 function SignInForm() {
   const router = useRouter();
-  const next = useSearchParams().get("next") ?? "/resumes";
+  /*
+   * `next` is where proxy.ts parked the destination the user actually asked
+   * for before being bounced here. It is validated rather than used raw — see
+   * safeNextPath: this value goes into router.push(), and an absolute URL there
+   * is an open redirect fired at the instant a sign-in succeeds.
+   */
+  const rawNext = useSearchParams().get("next");
+  const next = safeNextPath(rawNext, "/resumes");
+  /* Carry the destination across to sign-up, so someone who arrives here
+     wanting /tailor, discovers they have no account, and clicks through still
+     lands on /tailor at the end of it rather than on the default screen. */
+  const signUpHref = rawNext ? `/sign-up?next=${encodeURIComponent(next)}` : "/sign-up";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +100,7 @@ function SignInForm() {
       <p className="mt-6 text-center text-sm text-muted-foreground">
         No account?{" "}
         <Link
-          href="/sign-up"
+          href={signUpHref}
           className="font-medium text-link underline decoration-link/40 underline-offset-4 hover:decoration-link"
         >
           Sign up

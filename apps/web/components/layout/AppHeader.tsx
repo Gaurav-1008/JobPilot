@@ -100,8 +100,12 @@ export async function AppHeader() {
           <AppNav />
         ) : (
           <nav aria-label="Main" className="flex items-center gap-2">
+            {/* Same destination as the landing page's secondary CTA, and for
+                the same reason: /tailor is behind proxy.ts and the flow needs a
+                session regardless, so sending a signed-out visitor at the tool
+                itself only bounces them to the sign-in form. */}
             <Link
-              href="/tailor"
+              href="/sign-up?next=/tailor"
               className={buttonVariants({ variant: "ghost", size: "sm" })}
             >
               Try tailoring

@@ -99,10 +99,25 @@ export default function Home() {
             Find jobs
             <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
-          {/* The Phase 1 entry point still works and needs no account, so it
-              stays — as the secondary path rather than the only one. */}
+          {/*
+           * The Phase 1 entry point, kept as the secondary path rather than the
+           * only one.
+           *
+           * IT POINTS AT SIGN-UP, NOT AT /tailor. This button used to link
+           * straight to the tool under the caption "needs no account", and both
+           * halves of that were wrong: proxy.ts default-denies /tailor, so the
+           * click landed on the sign-in form, and even with the route opened up
+           * the flow could not have run — /api/analyze, /api/tailor, and
+           * /api/export/pdf each require a session and persist the run against
+           * a user id. The promise was never deliverable, so the honest fix is
+           * the door, not the lock.
+           *
+           * `next` carries the intent through sign-up and out the other side,
+           * so the user who asked to tailor a resume finishes on /tailor rather
+           * than on the job board.
+           */}
           <Link
-            href="/tailor"
+            href="/sign-up?next=/tailor"
             className={buttonVariants({
               size: "lg",
               variant: "outline",
@@ -114,7 +129,7 @@ export default function Home() {
         </div>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          Tailoring a pasted resume needs no account.
+          Tailoring a pasted resume skips the job search.
         </p>
       </section>
 
