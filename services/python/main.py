@@ -92,6 +92,16 @@ app = FastAPI(title="JobPilot worker", version="0.1.0", lifespan=lifespan)
 @app.middleware("http")
 async def service_token_and_logging(request: Request, call_next):
     """Service-token auth + structured access logging (P2.1.5)."""
+    # These three bypass EVERYTHING below — auth, access logging, and the trace
+    # join. That is deliberate for /health: ①'s degradation banner polls it and
+    # an uptime monitor may too, so logging it would bury the real traffic, and
+    # the whole point of the TTL cache in front of it is that probes stay cheap
+    # (EC-P7-11).
+    #
+    # The consequence is worth stating, because it makes a wrong test look like
+    # a broken feature: /health does NOT echo x-trace-id. Verify trace
+    # propagation (P7.3.4) against a real route instead — even a 422 carries the
+    # header, since the middleware wraps the response either way.
     if request.url.path in ("/health", "/docs", "/openapi.json"):
         return await call_next(request)
 
