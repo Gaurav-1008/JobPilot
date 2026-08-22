@@ -147,14 +147,54 @@ jobs:
       - name: No bare LLM_MODEL
         # EC-P0-04: the name meant the Groq model in one source project and the
         # Claude model in the other. It must not come back.
+        #
+        # COMMENTS ARE STRIPPED BEFORE MATCHING. The reason this rule exists is
+        # written down in six places — .env.example records what each source
+        # project used the name for, and three modules note what they were
+        # renamed from. Matching raw lines meant the step failed on its own
+        # documentation, which is exactly what it did on the first push.
+        #
+        # Deleting that prose to satisfy a grep would have been the wrong repair:
+        # it is the only record of why two settings exist where one used to.
+        #
+        # Stripping comments also lets the pattern go back to the bare word
+        # instead of a list of usage shapes, so `export LLM_MODEL=x` is caught —
+        # the previous regex missed it. And the old `grep -v` filtered whole
+        # LINES containing a correct name, so a real violation sharing a line
+        # with one — `LLM_MODEL=x  # replaces TAILORING_MODEL` — passed silently.
+        # Word boundaries handle that instead: EMAIL_LLM_MODEL does not match.
         run: |
-          if git grep -nE '\bLLM_MODEL\b' -- \
-               ':!docs' ':!*.md' ':!.github' \
-             | grep -vE 'EMAIL_LLM_MODEL|TAILORING_MODEL|SCORING_MODEL'; then
-            echo "Bare LLM_MODEL found — use TAILORING_MODEL or EMAIL_LLM_MODEL"
-            exit 1
-          fi
-          echo "no bare LLM_MODEL"
+          python3 - <<'PY'
+          import re, subprocess, sys
+
+          SKIP_PREFIXES = ("#", "//", "*", "/*", "<!--")
+          # The marker must start a token, so "https://x" is not read as one.
+          TRAILING = re.compile(r"(^|\s)(#|//).*$")
+          BARE = re.compile(r"\bLLM_MODEL\b")
+
+          files = subprocess.check_output(
+              ["git", "ls-files", "--", ":!docs", ":!*.md", ":!.github"],
+              text=True).split("\n")
+
+          hits = []
+          for f in filter(None, files):
+              try:
+                  text = open(f, encoding="utf-8").read()
+              except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+                  continue
+              for n, line in enumerate(text.split("\n"), 1):
+                  s = line.strip()
+                  if not s or s.startswith(SKIP_PREFIXES):
+                      continue
+                  if BARE.search(TRAILING.sub("", line)):
+                      hits.append(f"{f}:{n}:{s}")
+
+          if hits:
+              print("Bare LLM_MODEL found — use TAILORING_MODEL or EMAIL_LLM_MODEL")
+              print(*hits, sep="\n  ")
+              sys.exit(1)
+          print("no bare LLM_MODEL")
+          PY
 
       - name: No bulk-send endpoint
         # architecture.md §9.1: there is deliberately no send-all route. Not
