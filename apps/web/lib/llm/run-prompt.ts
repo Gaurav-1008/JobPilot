@@ -35,6 +35,20 @@ function stripFences(raw: string): string {
 
 const MAX_BACKOFF_ATTEMPTS = 3;
 
+/**
+ * The provider's own error sentence, if there is one.
+ *
+ * The OpenAI SDK puts the parsed body on `.error` and the raw text on
+ * `.message`. Either can be absent depending on how the failure happened, so
+ * both are tried and the result is bounded — an error body is not a log budget.
+ */
+function extractProviderMessage(err: unknown): string {
+  if (!err || typeof err !== "object") return "";
+  const body = (err as { error?: { message?: string } }).error;
+  const raw = body?.message ?? (err as { message?: string }).message ?? "";
+  return typeof raw === "string" ? raw.slice(0, 300) : "";
+}
+
 /** Map SDK/network errors to a stable LlmError, retrying 429s with backoff. */
 async function createWithBackoff(
   client: OpenAI,
@@ -68,10 +82,46 @@ async function createWithBackoff(
           cause: err,
         });
       }
-      throw new LlmError("LLM_UNKNOWN", "LLM request failed", {
-        stage,
-        cause: err,
-      });
+
+      /**
+       * A DECOMMISSIONED MODEL IS A CONFIG ERROR, NOT AN UNKNOWN ONE.
+       *
+       * Providers retire model ids on their own schedule, so a deployment that
+       * worked yesterday returns 404 `model_not_found` today with nothing
+       * having changed on our side. That is the single most likely cause of a
+       * sudden total LLM outage, and it is entirely actionable — one env var.
+       *
+       * It used to land in the catch-all below, which threw the message "LLM
+       * request failed" and attached the real cause to `.cause`, where nothing
+       * logged it. The operator saw:
+       *
+       *   {"code":"LLM_UNKNOWN","stage":"resume-parser",
+       *    "message":"LLM request failed"}
+       *
+       * — for an error whose body said, in plain English, that the model does
+       * not exist. Diagnosing it meant curling the provider by hand.
+       *
+       * So it gets its own branch, and the provider's own sentence is carried
+       * into the message. Provider error text names a model id, never user
+       * content, so this is safe to surface and to log.
+       */
+      const providerMessage = extractProviderMessage(err);
+      if (status === 404 || /does not exist|model_not_found|decommissioned/i.test(providerMessage)) {
+        throw new LlmError(
+          "LLM_CONFIG_ERROR",
+          `The configured model is unavailable: ${providerMessage || "model not found"}. ` +
+            "Check TAILORING_MODEL / SCORING_MODEL / EMAIL_LLM_MODEL against the provider's current model list.",
+          { stage, cause: err },
+        );
+      }
+
+      // Still the catch-all, but no longer silent: whatever the provider said
+      // travels in the message rather than only in an unlogged `cause`.
+      throw new LlmError(
+        "LLM_UNKNOWN",
+        providerMessage ? `LLM request failed: ${providerMessage}` : "LLM request failed",
+        { stage, cause: err },
+      );
     }
   }
   throw new LlmError("LLM_RATE_LIMIT", "LLM rate limit exceeded", {

@@ -265,7 +265,11 @@ export function llmTokens(tier: string, model: string, tokens: number): void {
  * that gets to skip the check.
  */
 function boundModel(model: string): string {
-  const slug = model.replace(/[^a-z0-9._-]/gi, "").slice(0, 40);
+  // `/` is allowed: providers namespace model ids now ("openai/gpt-oss-120b"),
+  // and stripping it silently renamed the model to "openaigpt-oss-120b" in
+  // every metric — still bounded, but no longer matching anything an operator
+  // would search for.
+  const slug = model.replace(/[^a-z0-9._/-]/gi, "").slice(0, 40);
   if (!slug) return "unknown";
   if (ID_SHAPED.test(slug)) {
     warnOnce("llm_tokens_total.model.id", () =>
