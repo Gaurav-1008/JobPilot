@@ -25,7 +25,14 @@ pydantic>=2.9,<3.0          # EC-P0-19: v2 explicitly; codegen targets v2
 requests>=2.32,<3.0
 beautifulsoup4>=4.12,<5.0
 lxml>=5.3,<6.0
-playwright>=1.48,<2.0       # pinned: see EC-P0-05 note above
+playwright==1.62.0          # EXACT, and it must match the Dockerfile base tag
+                            # (mcr.microsoft.com/playwright/python:v1.62.0-noble).
+                            # The client library and the bundled browser binaries
+                            # ship together; a range lets a rebuild months later
+                            # install a client whose browser is not in the image,
+                            # and that surfaces as "Executable doesn't exist" deep
+                            # in a scrape rather than as a build failure (EC-P7-30).
+                            # Bump BOTH lines together, never one.
 firecrawl-py>=2.0,<4.0     # NOT <2.0 — see below.
                             # boards/wellfound.py calls firecrawl.Firecrawl(),
                             # which is the v2 API. v1 only exports FirecrawlApp,
