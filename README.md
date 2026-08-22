@@ -54,6 +54,11 @@ been exercised end to end.
 
 ## Getting started
 
+**Node 22 or later**, and the repo pins 24 LTS in `.nvmrc` — run `nvm use`.
+The floor is not ours: `@supabase/supabase-js` declares `engines.node >=22`
+and warns on every process start below it. Node 20 also reached end of life,
+so it stops receiving security patches.
+
 ```bash
 # 0. Secrets — fill these in .env (never commit it)
 cp .env.example .env
