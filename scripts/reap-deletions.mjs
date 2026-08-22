@@ -31,6 +31,16 @@ if (before === 0) {
   process.exit(0);
 }
 
+// RUN WITH tsx, NOT node — see package.json.
+//
+// This imports a TypeScript module, and plain `node` cannot: it throws
+// ERR_MODULE_NOT_FOUND. The failure was latent in the worst way, because the
+// import sits below an early return — with an empty worklist the script printed
+// "Nothing pending" and exited 0, so it looked healthy in every test and would
+// have crashed only once it had work. For a reaper, "has work" is the same
+// moment as "a deletion left orphaned objects behind", which is the one case
+// it exists for.
+//
 // Imported through the app's module graph so the driver selection
 // (STORAGE_DRIVER) and the retry accounting stay in one implementation. A
 // second copy of "delete an object and clear its row" is a second place for the

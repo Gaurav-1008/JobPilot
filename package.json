@@ -28,7 +28,7 @@
     "verify:phase1": "node --env-file=.env scripts/verify-phase1.mjs",
     "verify:key-rotation": "node --env-file=.env scripts/verify-key-rotation.mjs",
     "rotate:credentials": "node --env-file=.env scripts/rotate-credentials.mjs",
-    "reap:deletions": "node --env-file=.env scripts/reap-deletions.mjs",
+    "reap:deletions": "npx tsx --env-file=.env scripts/reap-deletions.mjs",
     "worker": "npx tsx --env-file=.env services/orchestrator/index.ts",
     "py:worker": "cd services/python && ../../.venv/bin/python -m uvicorn main:app --port 8000"
   },

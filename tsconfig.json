@@ -6,6 +6,30 @@
     "lib/llm, services/jd-parser and the Prisma client. tsx reads this from the",
     "repo root, which is where the worker is started."
   ],
+
+  "//noEmit": [
+    "This project is TYPE-CHECKED, never compiled: ③ runs through tsx, which",
+    "does its own transpilation. Without `noEmit`, a bare `tsc -p tsconfig.json`",
+    "writes a .js beside every .ts under services/orchestrator. Those sit in the",
+    "tree, get swept up by the next `git add -A`, and shadow the real sources for",
+    "anything resolving extensionless imports. Every call site passes --noEmit",
+    "today, so this only mattered the first time someone forgot."
+  ],
+
+  "//include": [
+    "`scripts/**/*.mjs` used to be listed below and did NOTHING. TypeScript",
+    "ignores .js and .mjs unless allowJs is on, so `tsc --listFiles` reported",
+    "zero files from scripts/ — the entry claimed coverage the build never",
+    "provided, which is worse than omitting it, because it reads as checked.",
+    "",
+    "They stay out of the program on purpose: they are plain Node ESM run",
+    "directly, and enabling allowJs+checkJs reports 22 implicit-any findings",
+    "that are missing annotations rather than defects. The 23rd was real —",
+    "reap-deletions.mjs importing a .ts module under plain `node`, which throws",
+    "ERR_MODULE_NOT_FOUND — and that is fixed at the source (it runs under tsx",
+    "now) rather than by making the type checker responsible for noticing."
+  ],
+
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
@@ -15,11 +39,12 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
+    "noEmit": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./apps/web/*"]
     }
   },
-  "include": ["services/orchestrator/**/*.ts", "scripts/**/*.mjs"],
+  "include": ["services/orchestrator/**/*.ts"],
   "exclude": ["node_modules", "apps/web/.next"]
 }
