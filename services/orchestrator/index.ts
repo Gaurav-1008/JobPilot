@@ -122,10 +122,36 @@ const deps: Deps = {
       // EC-P2-33: ④ may return a non-JSON error body. Do not let a parse
       // error masquerade as the real status.
       const text = await res.text();
+
+      /**
+       * CHECK THE STATUS BEFORE TRUSTING THE BODY.
+       *
+       * This was missing, and the failure was ugly out of proportion to the
+       * fix. ④'s error responses are perfectly good JSON — a rejected service
+       * token returns `{"detail":"forbidden"}` with a 403 — so `JSON.parse`
+       * succeeded and the object was returned as though it were a board
+       * result. The handler then read `response.jobs`, got undefined, and threw
+       * "response.jobs is not iterable".
+       *
+       * That throw happens BEFORE `setBoardResult`, so nothing is recorded:
+       * `board_results` stays `{}`, the run reports no boards attempted, and
+       * the UI shows a search that found nothing with no reason given. P2.2.10
+       * says a board failure is DATA, not an exception — and a 403 is a board
+       * failure with an unusually clear cause.
+       *
+       * Observed after a WORKER_SERVICE_TOKEN rotation, where ③ still held the
+       * previous token. Any ④ error with a JSON body reproduces it.
+       */
+      if (!res.ok) {
+        // Thrown, so the handler's catch records `failed` with this reason
+        // against the board — which is what makes it visible in the UI.
+        throw new Error(`worker returned ${res.status}: ${text.slice(0, 120)}`);
+      }
+
       try {
         return JSON.parse(text);
       } catch {
-        throw new Error(`worker returned ${res.status}: ${text.slice(0, 120)}`);
+        throw new Error(`worker returned ${res.status}: non-JSON body`);
       }
     } finally {
       clearTimeout(timer);

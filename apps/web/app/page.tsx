@@ -1,23 +1,36 @@
 import Link from "next/link";
-import { ArrowRight, ShieldCheck, Target, GitCompareArrows } from "lucide-react";
+import { ArrowRight, ShieldCheck, Search, GitCompareArrows, Send } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 
+/**
+ * The four stages, in the order the product runs them.
+ *
+ * This list described the Phase 1 tool — three cards, all about tailoring a
+ * pasted resume. That was accurate then and became the landing page's version
+ * of a stale comment: everything it claimed was true, and it omitted three
+ * quarters of what the platform does.
+ */
 const FEATURES = [
   {
-    icon: Target,
-    title: "Explainable match score",
-    body: "See a 0–100 alignment score broken into skills, responsibilities, keywords, and seniority — with reasons, not just a number.",
+    icon: Search,
+    title: "Real jobs, harvested",
+    body: "Search once and JobPilot pulls matching roles from multiple boards, deduplicates them, and fetches each description automatically — no copy-paste.",
   },
   {
     icon: GitCompareArrows,
-    title: "Side-by-side rewrites",
-    body: "Every bullet is rewritten with a change reason, addressed keywords, and a confidence level you can review before you trust it.",
+    title: "Scored, then tailored",
+    body: "Every job gets an explainable 0–100 score. Tailoring rewrites each bullet with a reason, the keywords it addressed, and a confidence level you can check.",
+  },
+  {
+    icon: Send,
+    title: "Outreach you approve",
+    body: "Drafts cite the evidence your tailoring run actually found. Nothing sends without you reading it — approval is bound to the exact text.",
   },
   {
     icon: ShieldCheck,
     title: "Truthful by design",
-    body: "No invented employers, degrees, or metrics. Gaps are surfaced honestly instead of being papered over.",
+    body: "No invented employers, degrees, or metrics. Gaps are surfaced honestly rather than papered over, and the checks run on the server.",
   },
 ];
 
@@ -25,26 +38,31 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-6xl px-4">
       <section className="py-20 text-center">
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-          Phase 1 prototype · mock data
-        </span>
-        <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">
-          Tailor your resume to any job — truthfully.
+        <h1 className="mx-auto max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">
+          Your whole job search, in one pipeline.
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-          Paste your resume and a job description. Get an explainable match
-          score, an honest gap analysis, and side-by-side bullet rewrites you
-          can verify.
+          JobPilot harvests real listings, scores each one against your resume,
+          tailors it truthfully, and drafts outreach personalized with the
+          evidence the tailoring actually found — then tracks every application.
         </p>
-        <div className="mt-8">
-          <Link href="/tailor" className={buttonVariants({ size: "lg" })}>
-            Start tailoring
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Link href="/search" className={buttonVariants({ size: "lg" })}>
+            Find jobs
             <ArrowRight className="size-4" />
+          </Link>
+          {/* The Phase 1 entry point still works and needs no account, so it
+              stays — as the secondary path rather than the only one. */}
+          <Link
+            href="/tailor"
+            className={buttonVariants({ size: "lg", variant: "outline" })}
+          >
+            Just tailor a resume
           </Link>
         </div>
       </section>
 
-      <section className="grid gap-4 pb-20 sm:grid-cols-3">
+      <section className="grid gap-4 pb-20 sm:grid-cols-2 lg:grid-cols-4">
         {FEATURES.map(({ icon: Icon, title, body }) => (
           <div
             key={title}
