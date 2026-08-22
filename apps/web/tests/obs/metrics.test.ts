@@ -9,14 +9,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  dependencyState,
   guardrailBlock,
   harvestBoardOutcome,
+  hydrationOutcome,
   interlockBlock,
+  jdCacheLookup,
   llmTokens,
+  llmValidationRetry,
+  outreachOutcome,
   renderPrometheus,
   __counter,
   __resetMetrics,
 } from "@/lib/obs/metrics";
+import { __safeKeys } from "@/lib/obs/redact";
 
 beforeEach(() => __resetMetrics());
 
@@ -96,5 +102,74 @@ describe("exposition", () => {
 
   it("renders empty when nothing has been counted", () => {
     expect(renderPrometheus()).toBe("");
+  });
+});
+
+describe("every metric label survives the log serializer", () => {
+  /**
+   * The coupling nothing enforced, and it broke in production.
+   *
+   * `increment()` spreads its label map into a structured log line, and that
+   * line goes through the allow-list serializer (EC-P7-17). A label name that
+   * is not on the allow-list is emitted as "[redacted]" — so the counter is
+   * still correct in the registry and in /api/metrics, while the LOG transport
+   * ships a sample with no dimensions at all.
+   *
+   * It showed up in a real dev log as:
+   *   {"event":"dependency_state_total","dependency":"[redacted]",
+   *    "state":"[redacted]","count":1}
+   *
+   * Six of the twelve label names were missing. Until a TSDB is provisioned
+   * (§22.3) these log lines ARE the collector path, so half the §16.2 set was
+   * shipping nothing usable.
+   *
+   * This test derives the label names from what the metrics module ACTUALLY
+   * emits rather than from a hand-maintained list, so adding a metric with a
+   * new label fails here until the allow-list learns about it.
+   */
+  it("allow-lists every label name emitted by the §16.2 set", () => {
+    __resetMetrics();
+
+    // One sample of every metric, so the registry holds the full label surface.
+    harvestBoardOutcome("remoteok", "ok");
+    hydrationOutcome("firecrawl", "ok");
+    jdCacheLookup("hit");
+    llmValidationRetry("score_cheap");
+    guardrailBlock("word_limit");
+    interlockBlock("opt_out");
+    outreachOutcome("smtp", "ok");
+    llmTokens("cheap", "llama-3.1-8b-instant", 100);
+    dependencyState("redis", "up");
+
+    const labelNames = new Set<string>();
+    for (const line of renderPrometheus().split("\n")) {
+      const inner = /\{([^}]*)\}/.exec(line);
+      if (!inner) continue;
+      for (const pair of inner[1].split(",")) {
+        const name = pair.split("=")[0]?.trim();
+        if (name) labelNames.add(name);
+      }
+    }
+
+    expect(labelNames.size).toBeGreaterThan(0);
+    const safe = __safeKeys();
+    const missing = [...labelNames].filter((n) => !safe.has(n)).sort();
+
+    expect(
+      missing,
+      `these metric labels would log as "[redacted]": ${missing.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("uses promptName, never prompt, as a label", () => {
+    // `prompt` is forbidden by the allow-list on purpose: as a label it means
+    // WHICH prompt, but as a log key it reads as the prompt TEXT. Renaming the
+    // label was the fix; weakening the forbidden list was not.
+    __resetMetrics();
+    llmValidationRetry("score_cheap");
+
+    const text = renderPrometheus();
+    expect(text).toContain('promptName="score_cheap"');
+    expect(text).not.toMatch(/[{,]prompt=/);
   });
 });

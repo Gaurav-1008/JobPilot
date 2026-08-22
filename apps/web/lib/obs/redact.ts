@@ -76,6 +76,32 @@ const SAFE_KEYS: ReadonlySet<string> = new Set([
   "prompt_tokens", "completion_tokens", "total_tokens",
   // Hashed / derived values produced by this module
   "recipientHash", "bodyHash", "emailHash",
+  /*
+   * §16.2 metric LABEL names (lib/obs/metrics.ts).
+   *
+   * Every one of these is produced by `bound()`, which maps its input to a
+   * member of a closed enumeration or to "other" — so by construction the
+   * value is one of a handful of known strings and can never carry an id or
+   * anything a user wrote. That is exactly the standard this list requires.
+   *
+   * They were missing, and the symptom was visible but easy to skim past:
+   *   {"event":"dependency_state_total","dependency":"[redacted]",
+   *    "state":"[redacted]","count":1}
+   *
+   * A counter whose labels are all "[redacted]" is not a counter. The
+   * in-process registry and /api/metrics were unaffected — they never touch
+   * this serializer — but until a TSDB exists these log lines ARE the
+   * collector path, so half the metric set was shipping no dimensions at all.
+   *
+   * The coupling between the two modules is asserted in tests/obs/metrics.test.ts
+   * rather than left to whoever adds the next metric to remember.
+   *
+   * `prompt` is NOT here, and the metric label is `promptName` instead. As a
+   * metric label it means WHICH prompt; as a log key it reads as THE prompt
+   * text, and that ambiguity is precisely what the forbidden-key test guards
+   * against. Renaming the label was cheaper than weakening the rule.
+   */
+  "dependency", "state", "result", "type", "class", "promptName",
 ]);
 
 /** Longest string emitted for any single value. Beyond this, truncate. */

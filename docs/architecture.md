@@ -1261,7 +1261,7 @@ One JSON line per operation, always carrying `{ requestId, userId, jobName?, dur
 | `harvest_board_outcome{board,status}` | is a board silently degrading? |
 | `hydration_outcome{method,status}` | is the fallback chain working? |
 | `jd_cache_hit_ratio` | are we being kind to source sites? |
-| `llm_validation_retry_total{prompt}` | prompt drift after a model change |
+| `llm_validation_retry_total{promptName}` | prompt drift after a model change. Label is `promptName`, not `prompt`: label maps are also spread into the structured log line, where a key called `prompt` reads as the prompt *text* — and the redaction allow-list forbids that key by design (EC-P7-17) |
 | `guardrail_block_total{type}` | truthfulness enforcement actually firing |
 | `interlock_block_total{check}` | which gate stops sends — **check 5/6 firing is the system working** |
 | `outreach_outcome{provider,status}` | delivery health |

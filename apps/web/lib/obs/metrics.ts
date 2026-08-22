@@ -201,10 +201,19 @@ export function jdCacheLookup(result: "hit" | "miss"): void {
   });
 }
 
-/** Prompt drift after a model change: this climbs before anything else breaks. */
-export function llmValidationRetry(prompt: string): void {
+/**
+ * Prompt drift after a model change: this climbs before anything else breaks.
+ *
+ * The label is `promptName`, not `prompt`. §16.2 writes it as
+ * `llm_validation_retry_total{prompt}`, and the value is identical — but these
+ * label maps are also spread into the structured log line, where a key called
+ * `prompt` reads as the prompt TEXT rather than its name. The redaction
+ * allow-list forbids `prompt` for exactly that reason (EC-P7-17), so the label
+ * carries the unambiguous name instead.
+ */
+export function llmValidationRetry(promptName: string): void {
   increment("llm_validation_retry_total", {
-    prompt: bound(PROMPTS, prompt, "llm_validation_retry_total", "prompt"),
+    promptName: bound(PROMPTS, promptName, "llm_validation_retry_total", "promptName"),
   });
 }
 
