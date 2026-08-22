@@ -59,8 +59,22 @@ export async function AppHeader() {
   return (
     <header className="border-b border-border bg-card/60 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+        {/*
+         * The logo goes HOME, signed in or not.
+         *
+         * It used to redirect a signed-in user to /jobs, on the usual reasoning
+         * that the board is more useful to them than a marketing page. The
+         * problem is that it made the home page unreachable while signed in —
+         * clicking the one control every site puts there for "take me to the
+         * start" silently did something else, and there was no other way back.
+         *
+         * Nothing is lost by changing it: "Jobs" is already a nav item two
+         * pixels to the right, so the logo was a duplicate of an existing
+         * destination AND the only route to a page you could otherwise not
+         * open.
+         */}
         <Link
-          href={session ? "/jobs" : "/"}
+          href="/"
           className="flex shrink-0 items-center gap-2 font-semibold"
         >
           <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
