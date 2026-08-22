@@ -17,8 +17,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, MailPlus } from "lucide-react";
 
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ListEmpty, ListError, ListLoading } from "@/components/ui/list-state";
+import { Page, PageHeader } from "@/components/ui/page";
+import { ScoreValue } from "@/components/ui/score";
 
 interface Row {
   id: string;
@@ -36,18 +42,24 @@ interface Row {
   notes: string | null;
 }
 
-/** Funnel order, left to right. */
-const COLUMNS = [
-  ["saved", "Saved"],
-  ["scored", "Scored"],
-  ["tailored", "Tailored"],
-  ["contact_added", "Contact added"],
-  ["emailed", "Emailed"],
-  ["replied", "Replied"],
-  ["interviewing", "Interviewing"],
-  ["rejected", "Rejected"],
-  ["closed", "Closed"],
-] as const;
+/**
+ * Funnel order, left to right — plus the tone each stage carries.
+ *
+ * The tone is not decoration: nine identical grey headings made "rejected" and
+ * "interviewing" equally easy to skim past, and those are the two rows a user
+ * opens this page to find.
+ */
+const COLUMNS: [string, string, "secondary" | "info" | "success" | "warning" | "danger"][] = [
+  ["saved", "Saved", "secondary"],
+  ["scored", "Scored", "secondary"],
+  ["tailored", "Tailored", "info"],
+  ["contact_added", "Contact added", "info"],
+  ["emailed", "Emailed", "info"],
+  ["replied", "Replied", "success"],
+  ["interviewing", "Interviewing", "success"],
+  ["rejected", "Rejected", "danger"],
+  ["closed", "Closed", "secondary"],
+];
 
 export default function TrackerPage() {
   const qc = useQueryClient();
@@ -86,15 +98,15 @@ export default function TrackerPage() {
   // query indistinguishable from an empty tracker.
   if (isPending) {
     return (
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <Page width="wide">
         <ListLoading rows={4} label="Loading your tracker" />
-      </main>
+      </Page>
     );
   }
 
   if (isError) {
     return (
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <Page width="wide">
         {/* EC-P7-05 — this refetches a GET, so retrying is idempotent. The
             follow-up sweep below is a mutation and deliberately has no retry
             affordance of its own. */}
@@ -103,7 +115,7 @@ export default function TrackerPage() {
           title="Your tracker could not be loaded"
           detail="The request did not complete. Every application is still recorded — this is a display problem."
         />
-      </main>
+      </Page>
     );
   }
 
@@ -111,100 +123,129 @@ export default function TrackerPage() {
   const pending = data?.pendingReview ?? 0;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Tracker</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Every application, and everything that has happened to it.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3 text-sm">
-          <a href="/api/export/bundle" className="rounded border px-3 py-2">
-            Export proof
-          </a>
-          <a href="/api/export/bundle?redact=1" className="rounded border px-3 py-2">
-            Export redacted
-          </a>
-          <button
-            onClick={() => sweep.mutate()}
-            disabled={sweep.isPending}
-            className="rounded border px-3 py-2 disabled:opacity-50"
+    <Page width="wide">
+      <PageHeader
+        title="Tracker"
+        description="Every application, and everything that has happened to it."
+        actions={
+          <>
+            <a
+              href="/api/export/bundle"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Export proof
+            </a>
+            <a
+              href="/api/export/bundle?redact=1"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Export redacted
+            </a>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => sweep.mutate()}
+              loading={sweep.isPending}
+              title="Drafts follow-ups for emails you sent over a week ago with no reply recorded. Never sends."
+            >
+              {!sweep.isPending && <MailPlus className="size-4" aria-hidden="true" />}
+              {sweep.isPending ? "Checking…" : "Draft follow-ups"}
+            </Button>
+          </>
+        }
+      />
+
+      <div className="mt-6 space-y-4">
+        {/* EC-P6-23: a review queue nobody is told about is a queue nobody clears. */}
+        {pending > 0 && (
+          <Alert
+            role="status"
+            tone="warning"
+            title={`${pending} draft${pending === 1 ? "" : "s"} waiting for your review`}
           >
-            {sweep.isPending ? "Checking…" : "Draft follow-ups"}
-          </button>
-        </div>
+            <Link href="/outreach">Review them</Link> — nothing is sent until you
+            approve it.
+          </Alert>
+        )}
+
+        {notice && (
+          <Alert role="status" tone="info">
+            {notice}
+          </Alert>
+        )}
+
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          “Draft follow-ups” writes drafts for anything sent over a week ago that
+          you have not marked as replied. It cannot read your inbox and it cannot
+          send — every draft goes through the same review and the same checks.
+        </p>
       </div>
 
-      {/* EC-P6-23: a review queue nobody is told about is a queue nobody clears. */}
-      {pending > 0 && (
-        <p className="mt-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          {pending} draft{pending === 1 ? "" : "s"} waiting for your review.{" "}
-          <Link href="/outreach" className="underline">
-            Review them
-          </Link>{" "}
-          — nothing is sent until you approve it.
-        </p>
-      )}
-
-      {notice && (
-        <p role="status" className="mt-4 rounded border border-border bg-card p-3 text-sm">
-          {notice}
-        </p>
-      )}
-
-      <p className="mt-4 text-xs text-muted-foreground">
-        “Draft follow-ups” writes drafts for anything sent over a week ago that
-        you have not marked as replied. It cannot read your inbox and it cannot
-        send — every draft goes through the same review and the same checks.
-      </p>
-
       {rows.length === 0 && (
-        <ListEmpty
-          title="Nothing tracked yet"
-          detail="Applications appear here as soon as you score or tailor a job — the tracker is built from what you do, not something you fill in."
-          action={{ label: "Find jobs to score", href: "/jobs" }}
-        />
+        <div className="mt-6">
+          <ListEmpty
+            title="Nothing tracked yet"
+            detail="Applications appear here as soon as you score or tailor a job — the tracker is built from what you do, not something you fill in."
+            action={{ label: "Find jobs to score", href: "/jobs" }}
+          />
+        </div>
       )}
 
       <div className="mt-8 space-y-8">
-        {COLUMNS.map(([status, label]) => {
+        {COLUMNS.map(([status, label, tone]) => {
           const group = rows.filter((r) => r.status === status);
           if (group.length === 0) return null;
           return (
-            <section key={status}>
-              <h2 className="text-sm font-medium text-muted-foreground">
-                {label} ({group.length})
+            <section key={status} aria-labelledby={`group-${status}`}>
+              <h2 id={`group-${status}`} className="flex items-center gap-2">
+                <Badge variant={tone}>{label}</Badge>
+                <span className="text-xs text-muted-foreground">
+                  {group.length}
+                </span>
               </h2>
-              <ul className="mt-2 space-y-2">
+
+              <ul className="mt-3 space-y-2">
                 {group.map((r) => (
-                  <li key={r.id} className="rounded border border-border bg-card p-3">
+                  <li
+                    key={r.id}
+                    className="rounded-lg border border-border bg-card p-4 shadow-sm transition-colors duration-150 hover:border-border-strong"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <Link
                           href={`/tracker/${r.id}`}
-                          className="font-medium text-primary underline underline-offset-4"
+                          className="font-medium text-link underline decoration-link/40 underline-offset-4 hover:decoration-link"
                         >
                           {r.jobTitle}
                         </Link>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="mt-0.5 truncate text-sm text-muted-foreground">
                           {r.company}
                           {r.location ? ` · ${r.location}` : ""}
                         </p>
-                      </div>
-                      <div className="shrink-0 text-right text-xs text-muted-foreground">
-                        {/* EC-P6-06: a scoring-only application has none of
-                            this, and renders blank rather than breaking. */}
-                        {r.tailoredScore ?? r.originalScore ?? "—"}
-                        {r.resumeVersion !== null && ` · resume v${r.resumeVersion}`}
-                        <div>
+                        <p className="mt-1.5 text-xs text-muted-foreground">
                           {r.contactCount} contact{r.contactCount === 1 ? "" : "s"}
-                          {r.attemptCount > 0 && ` · ${r.attemptCount} attempt${r.attemptCount === 1 ? "" : "s"}`}
-                        </div>
+                          {r.attemptCount > 0 &&
+                            ` · ${r.attemptCount} attempt${r.attemptCount === 1 ? "" : "s"}`}
+                          {r.resumeVersion !== null && ` · resume v${r.resumeVersion}`}
+                        </p>
                         {r.pendingReview > 0 && (
-                          <div className="text-amber-600">
+                          <p className="mt-1 text-xs font-medium text-warning">
                             {r.pendingReview} awaiting review
-                          </div>
+                          </p>
+                        )}
+                      </div>
+
+                      {/* EC-P6-06: a scoring-only application has none of
+                          this, and renders blank rather than breaking. */}
+                      <div className="shrink-0 text-right">
+                        {r.tailoredScore ?? r.originalScore ? (
+                          <ScoreValue
+                            score={(r.tailoredScore ?? r.originalScore) as number}
+                            size="md"
+                          />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
                         )}
                       </div>
                     </div>
@@ -215,6 +256,6 @@ export default function TrackerPage() {
           );
         })}
       </div>
-    </main>
+    </Page>
   );
 }

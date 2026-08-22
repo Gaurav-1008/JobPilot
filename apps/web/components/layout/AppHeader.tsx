@@ -2,8 +2,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Wand2 } from "lucide-react";
 
+import { AppNav } from "@/components/layout/AppNav";
 import { DegradationBanner } from "@/components/layout/DegradationBanner";
-import { SignOutButton } from "@/components/SignOutButton";
+import { buttonVariants } from "@/components/ui/button";
 
 /**
  * Top navigation.
@@ -16,17 +17,12 @@ import { SignOutButton } from "@/components/SignOutButton";
  *
  * Links are session-gated rather than always shown: every destination here sits
  * behind proxy.ts's default-deny, so offering them to a signed-out visitor only
- * bounces them to sign-in. `getSession()` validates the cookie against GoTrue —
- * the same call the middleware already makes for this request.
+ * bounces them to sign-in.
+ *
+ * The links themselves live in AppNav, a client component, because the active
+ * indicator needs `usePathname()`. This shell stays a server component so the
+ * cookie read below does not have to become a client-side fetch.
  */
-const NAV = [
-  { href: "/search", label: "Search" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/outreach", label: "Outreach" },
-  { href: "/tracker", label: "Tracker" },
-  { href: "/resumes", label: "Resumes" },
-  { href: "/profile", label: "Profile" },
-] as const;
 
 /**
  * Is a session cookie present? A COOKIE READ, NOT AN AUTH CALL.
@@ -57,8 +53,18 @@ export async function AppHeader() {
   const session = await hasSessionCookie();
 
   return (
-    <header className="border-b border-border bg-card/60 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+    /*
+     * Sticky, because the dashboard screens are long lists and the nav is the
+     * only way between them — scrolling to the bottom of 40 harvested jobs
+     * should not mean scrolling back up to leave.
+     *
+     * `bg-card/80 + backdrop-blur` keeps the rows underneath faintly visible
+     * while staying opaque enough to read against; the fallback `bg-card` in
+     * `supports-` guards browsers without backdrop-filter, where the
+     * translucent version renders as unreadable text over content.
+     */
+    <header className="sticky top-0 z-50 border-b border-border bg-card supports-[backdrop-filter]:bg-card/85 supports-[backdrop-filter]:backdrop-blur">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         {/*
          * The logo goes HOME, signed in or not.
          *
@@ -75,39 +81,32 @@ export async function AppHeader() {
          */}
         <Link
           href="/"
-          className="flex shrink-0 items-center gap-2 font-semibold"
+          /* min-h-11: the logo is the "take me home" control on every screen
+             and it drew at 28px — the smallest tap target in the header, and
+             the one a thumb reaches for most often. The header is 56px tall,
+             so 44px centres inside it without changing the layout. */
+          className="flex min-h-11 shrink-0 items-center gap-2 rounded-md font-semibold tracking-tight transition-opacity hover:opacity-80"
         >
-          <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
+          <span
+            aria-hidden="true"
+            className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm"
+          >
             <Wand2 className="size-4" />
           </span>
           JobPilot
         </Link>
 
         {session ? (
-          <nav className="flex items-center gap-4 overflow-x-auto text-sm">
-            {NAV.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="whitespace-nowrap text-muted-foreground hover:text-foreground"
-              >
-                {label}
-              </Link>
-            ))}
-            <SignOutButton />
-          </nav>
+          <AppNav />
         ) : (
-          <nav className="flex items-center gap-4 text-sm">
+          <nav aria-label="Main" className="flex items-center gap-2">
             <Link
               href="/tailor"
-              className="whitespace-nowrap text-muted-foreground hover:text-foreground"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
             >
               Try tailoring
             </Link>
-            <Link
-              href="/sign-in"
-              className="whitespace-nowrap text-muted-foreground hover:text-foreground"
-            >
+            <Link href="/sign-in" className={buttonVariants({ size: "sm" })}>
               Sign in
             </Link>
           </nav>

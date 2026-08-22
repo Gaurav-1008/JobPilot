@@ -15,6 +15,17 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, MailPlus, Settings2, ShieldOff } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { ListEmpty, ListLoading } from "@/components/ui/list-state";
+import { Page, PageHeader } from "@/components/ui/page";
+import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface AppRow {
   id: string;
@@ -58,113 +69,144 @@ export default function OutreachPage() {
   });
 
   if (isPending) {
-    return <main className="p-8 text-sm text-muted-foreground">Loading…</main>;
+    return (
+      <Page width="wide">
+        <ListLoading rows={4} label="Loading your outreach" />
+      </Page>
+    );
   }
 
   const rows = apps?.applications ?? [];
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Outreach</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Add a contact you already have. JobPilot does not look people up.
-          </p>
-        </div>
-        {/* Both live here rather than only in the header: they are outreach
-            concerns, and sending settings in particular has to be reachable
-            BEFORE there is anything to send — connecting an account is a
-            prerequisite, not a follow-up. */}
-        <div className="flex shrink-0 flex-wrap items-center gap-4 whitespace-nowrap text-sm">
-          {/* The sweep produces drafts that land in THIS queue, so the action
-              belongs here and not only on the tracker. It was tracker-only at
-              first, which put it on a screen the outreach flow never visits. */}
-          <FollowUpButton onDone={setSweepNotice} />
-          <Link href="/outreach/settings" className="underline">
-            Sending settings
-          </Link>
-          <Link href="/opt-out" className="underline">
-            Opt-out list
-          </Link>
-        </div>
-      </div>
+    <Page width="wide">
+      <PageHeader
+        title="Outreach"
+        description="Add a contact you already have. JobPilot does not look people up."
+        actions={
+          <>
+            {/* The sweep produces drafts that land in THIS queue, so the action
+                belongs here and not only on the tracker. It was tracker-only at
+                first, which put it on a screen the outreach flow never visits. */}
+            <FollowUpButton onDone={setSweepNotice} />
+            {/* Both live here rather than only in the header: they are outreach
+                concerns, and sending settings in particular has to be reachable
+                BEFORE there is anything to send — connecting an account is a
+                prerequisite, not a follow-up. */}
+            <Link
+              href="/outreach/settings"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Settings2 className="size-4" aria-hidden="true" />
+              Sending settings
+            </Link>
+            <Link
+              href="/opt-out"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <ShieldOff className="size-4" aria-hidden="true" />
+              Opt-out list
+            </Link>
+          </>
+        }
+      />
 
       {sweepNotice && (
-        <p role="status" className="mt-4 rounded border border-border bg-card p-3 text-sm">
+        <Alert role="status" tone="info" className="mt-6">
           {sweepNotice}
-        </p>
+        </Alert>
       )}
 
-      {rows.length === 0 && (
-        <div className="mt-8 rounded border border-border bg-card p-4 text-sm text-muted-foreground">
-          <p>
-            No applications yet. Tailor a resume for a job first — outreach is
-            seeded from that tailoring run, so the email can cite real evidence
-            instead of a generic template.
-          </p>
+      {rows.length === 0 ? (
+        <div className="mt-8">
+          <ListEmpty
+            title="No applications yet"
+            detail="Tailor a resume for a job first — outreach is seeded from that tailoring run, so the email can cite real evidence instead of a generic template."
+            action={{ label: "Pick a job to tailor", href: "/jobs" }}
+          />
           {/* An empty state that only says "nothing here" makes the user guess
               what to do next. Both next steps are one click from here. */}
-          <p className="mt-3">
-            <Link href="/jobs" className="underline">
-              Pick a job to tailor
-            </Link>
-            {" · or "}
-            <Link href="/outreach/settings" className="underline">
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Or{" "}
+            <Link
+              href="/outreach/settings"
+              className="font-medium text-link underline decoration-link/40 underline-offset-4 hover:decoration-link"
+            >
               connect a sending account
             </Link>{" "}
             while you are here.
           </p>
         </div>
-      )}
+      ) : (
+        <ul className="mt-8 space-y-2">
+          {rows.map((app) => {
+            const expanded = openApp === app.id;
+            return (
+              <li
+                key={app.id}
+                className="rounded-lg border border-border bg-card shadow-sm"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3 p-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{app.jobTitle}</p>
+                    <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                      {app.company}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{app.status.replace("_", " ")}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {app.contactCount} contact{app.contactCount === 1 ? "" : "s"}
+                        {app.attemptCount > 0 &&
+                          ` · ${app.attemptCount} attempt${app.attemptCount === 1 ? "" : "s"}`}
+                      </span>
+                    </div>
+                  </div>
 
-      <ul className="mt-8 space-y-3">
-        {rows.map((app) => (
-          <li key={app.id} className="rounded border border-border bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-medium">{app.jobTitle}</p>
-                <p className="text-sm text-muted-foreground">{app.company}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {app.contactCount} contact{app.contactCount === 1 ? "" : "s"}
-                  {app.attemptCount > 0 && ` · ${app.attemptCount} attempt${app.attemptCount === 1 ? "" : "s"}`}
-                  {` · ${app.status}`}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <button
-                  onClick={() => setOpenApp(openApp === app.id ? null : app.id)}
-                  className="rounded border px-3 py-1 text-sm"
-                >
-                  {openApp === app.id ? "Close" : "Contacts"}
-                </button>
-                {app.contactCount > 0 && (
-                  <Link
-                    href={`/outreach/${app.id}`}
-                    className="rounded bg-black px-3 py-1 text-sm text-white"
-                  >
-                    Write email
-                  </Link>
+                  <div className="flex shrink-0 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={expanded}
+                      onClick={() => setOpenApp(expanded ? null : app.id)}
+                    >
+                      Contacts
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn(
+                          "size-4 transition-transform duration-200",
+                          expanded && "rotate-180",
+                        )}
+                      />
+                    </Button>
+                    {app.contactCount > 0 && (
+                      <Link
+                        href={`/outreach/${app.id}`}
+                        className={buttonVariants({ size: "sm" })}
+                      >
+                        Write email
+                      </Link>
+                    )}
+                  </div>
+                </div>
+
+                {expanded && (
+                  <div className="space-y-4 border-t border-border bg-elevated p-4">
+                    <ContactList contacts={contacts?.contacts ?? []} />
+                    <AddContactForm
+                      applicationId={app.id}
+                      onDone={() => {
+                        void qc.invalidateQueries({ queryKey: ["contacts", app.id] });
+                        void qc.invalidateQueries({ queryKey: ["applications"] });
+                      }}
+                    />
+                  </div>
                 )}
-              </div>
-            </div>
-
-            {openApp === app.id && (
-              <div className="mt-4 border-t border-border pt-4">
-                <ContactList contacts={contacts?.contacts ?? []} />
-                <AddContactForm
-                  applicationId={app.id}
-                  onDone={() => {
-                    void qc.invalidateQueries({ queryKey: ["contacts", app.id] });
-                    void qc.invalidateQueries({ queryKey: ["applications"] });
-                  }}
-                />
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </main>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Page>
   );
 }
 
@@ -191,14 +233,16 @@ function FollowUpButton({ onDone }: { onDone: (message: string) => void }) {
   });
 
   return (
-    <button
+    <Button
+      variant="outline"
+      size="sm"
       onClick={() => sweep.mutate()}
-      disabled={sweep.isPending}
-      className="underline disabled:opacity-50"
+      loading={sweep.isPending}
       title="Drafts follow-ups for emails you sent over a week ago with no reply recorded. Never sends."
     >
+      {!sweep.isPending && <MailPlus className="size-4" aria-hidden="true" />}
       {sweep.isPending ? "Checking…" : "Draft follow-ups"}
-    </button>
+    </Button>
   );
 }
 
@@ -210,14 +254,15 @@ function ContactList({ contacts }: { contacts: ContactRow[] }) {
   return (
     <ul className="space-y-2">
       {contacts.map((c) => (
-        <li key={c.id} className="flex items-center justify-between gap-3 text-sm">
-          <span>
+        <li
+          key={c.id}
+          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm"
+        >
+          <span className="min-w-0">
             {c.recipientName ? `${c.recipientName} · ` : ""}
             <span className="font-mono text-xs">{c.recipientEmailDisplay}</span>
           </span>
-          <span className="shrink-0 rounded bg-accent px-2 py-0.5 text-xs text-accent-foreground">
-            {SOURCE_LABELS[c.source] ?? c.source}
-          </span>
+          <Badge variant="accent">{SOURCE_LABELS[c.source] ?? c.source}</Badge>
         </li>
       ))}
     </ul>
@@ -263,75 +308,68 @@ function AddContactForm({
 
   return (
     <form
-      className="mt-4 space-y-3"
+      className="space-y-4 border-t border-border pt-4"
       onSubmit={(e) => {
         e.preventDefault();
         add.mutate();
       }}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-xs text-muted-foreground">Email</span>
-          <input
-            type="text"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="priya@company.com"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted-foreground">Name (optional)</span>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
-          />
-        </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Email" required error={error}>
+          {(p) => (
+            <Input
+              {...p}
+              type="text"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="priya@company.com"
+            />
+          )}
+        </Field>
+        <Field label="Name" hint="Optional.">
+          {(p) => (
+            <Input {...p} type="text" value={name} onChange={(e) => setName(e.target.value)} />
+          )}
+        </Field>
       </div>
 
-      <label className="block">
-        <span className="text-xs text-muted-foreground">
-          How did you get this address?
-        </span>
-        <select
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          required
-          className="mt-1 w-full rounded border px-3 py-2 text-sm"
-        >
-          {/* No default. Provenance is a decision, not a form field to skip. */}
-          <option value="">Choose one…</option>
-          <option value="user_entered">I already had it</option>
-          <option value="company_careers_page">Company careers page</option>
-          <option value="imported_csv">Imported from a CSV</option>
-        </select>
-      </label>
-
-      <label className="block">
-        <span className="text-xs text-muted-foreground">
-          Personalization note (optional)
-        </span>
-        <input
-          type="text"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Met at PyCon; runs the platform team"
-          className="mt-1 w-full rounded border px-3 py-2 text-sm"
-        />
-      </label>
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={add.isPending || !email || !source}
-        className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+      <Field
+        label="How did you get this address?"
+        required
+        hint="Recorded permanently with the contact — this is the provenance every email is checked against."
       >
+        {(p) => (
+          <Select
+            {...p}
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            required
+          >
+            {/* No default. Provenance is a decision, not a form field to skip. */}
+            <option value="">Choose one…</option>
+            <option value="user_entered">I already had it</option>
+            <option value="company_careers_page">Company careers page</option>
+            <option value="imported_csv">Imported from a CSV</option>
+          </Select>
+        )}
+      </Field>
+
+      <Field label="Personalization note" hint="Optional — one detail the draft can cite.">
+        {(p) => (
+          <Input
+            {...p}
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Met at PyCon; runs the platform team"
+          />
+        )}
+      </Field>
+
+      <Button type="submit" loading={add.isPending} disabled={!email || !source}>
         {add.isPending ? "Adding…" : "Add contact"}
-      </button>
+      </Button>
     </form>
   );
 }

@@ -90,8 +90,46 @@ describe("EC-P7-07 — warnings precede the approve control in DOM order", () =>
   it("gives the gate controls a visible focus indicator", () => {
     // A keyboard user must be able to see which control they are about to
     // activate. This matters most on exactly these two buttons.
-    const approveBlock = source.slice(at(/onClick=\{approve\}/), at(/onClick=\{approve\}/) + 700);
-    expect(approveBlock).toMatch(/focus-visible:outline/);
+    //
+    // ─────────────────────────────────────────────────────────────────────
+    // THIS ASSERTION MOVED, BECAUSE THE GUARANTEE MOVED.
+    //
+    // It used to grep this page for a literal `focus-visible:outline` class
+    // sitting near the Approve control. That worked while the two gate buttons
+    // were the only controls in the app carrying focus styling by hand — which
+    // is also the problem: Save, Skip, and every "Write draft" button on the
+    // same screen had none, so the property was guaranteed on two controls and
+    // absent on the rest.
+    //
+    // Focus styling is now one global `:focus-visible` rule in globals.css
+    // covering every focusable element. Grepping this file can no longer see
+    // it, so the check reads the stylesheet instead — and adds the assertion
+    // the old version could not make: that nothing on the gate SUPPRESSES the
+    // ring. `outline-none` on these buttons is the realistic regression, and
+    // the previous test would have passed straight through it as long as the
+    // literal class was still somewhere nearby.
+    // ─────────────────────────────────────────────────────────────────────
+    const css = readFileSync(
+      join(__dirname, "..", "..", "app", "globals.css"),
+      "utf8",
+    );
+
+    // The rule exists, applies to <button>, and draws something visible.
+    const rule = /:where\(([^)]*\bbutton\b[^)]*)\):focus-visible\s*\{[^}]*outline:[^};]*\d+px[^}]*\}/;
+    expect(css, "globals.css must give every button a focus-visible outline")
+      .toMatch(rule);
+
+    // And the gate does not opt out of it. Checked across the whole review
+    // page plus the shared Button, since either could remove the outline for
+    // these controls without touching the stylesheet.
+    const button = readFileSync(
+      join(__dirname, "..", "..", "components", "ui", "button.tsx"),
+      "utf8",
+    );
+    for (const [name, text] of [["review page", source], ["Button", button]] as const) {
+      expect(text, `${name} must not suppress the focus ring`)
+        .not.toMatch(/outline-none|outline-hidden/);
+    }
   });
 });
 

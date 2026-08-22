@@ -1,62 +1,181 @@
 @import "tailwindcss";
 
 /*
- * Design tokens for Resume Shapeshifter.
- * Shadcn-style CSS variables mapped into Tailwind v4 via @theme inline so
- * utilities like bg-primary, text-muted-foreground, and border work.
+ * ════════════════════════════════════════════════════════════════════════════
+ * JobPilot design tokens.
+ *
+ * ONE RULE: components never write a raw colour. Every surface, border, and
+ * piece of text resolves through a token below, so a component written once is
+ * correct in both themes without being re-checked in either.
+ *
+ * That rule is here because the app broke it everywhere. Screens were built
+ * with `bg-black`, `text-neutral-600`, and — worst — the `bg-red-50` /
+ * `text-red-900` pairing used for every error panel. In dark mode that renders
+ * a near-white block in the middle of a dark page, which is not a style
+ * complaint: the error text sits at roughly 1.1:1 against its own container.
+ * The states that matter most were the least readable.
+ *
+ * STATUS COLOURS ARE TRIPLES, NOT SINGLE VALUES. Each of success/warning/
+ * danger/info carries a text colour, a soft background derived from it, and a
+ * border. The soft variants are mixed against `--card` rather than hardcoded,
+ * so they follow the theme instead of being redefined per theme and drifting.
+ * ════════════════════════════════════════════════════════════════════════════
  */
+
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+  --background: #f6f7fb;
+  --foreground: #0b1220;
 
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #0b1220;
 
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
+  /* One step above card, for nested panels that need to separate without
+     adding a second border (data tables, evidence panels, sub-cards). */
+  --elevated: #fbfcfe;
 
+  --muted: #eef1f6;
+  --muted-foreground: #56607a;
+
+  /* ── Brand ────────────────────────────────────────────────────────────── */
+  /* indigo-600. White on this is 6.3:1 — the reason it is not indigo-500,
+     which lands at 4.47:1 and fails AA for the button labels sitting on it. */
   --primary: #4f46e5;
   --primary-foreground: #ffffff;
+  --primary-hover: #4338ca;
+  --primary-soft: color-mix(in srgb, var(--primary) 10%, var(--card));
+
+  /*
+   * LINK IS A SEPARATE TOKEN FROM PRIMARY, AND HAS TO BE.
+   *
+   * `--primary` is a SURFACE colour: its job is to be dark enough that white
+   * button labels clear 4.5:1 on top of it. A link is the inverse problem —
+   * coloured text sitting ON the page background — and the two requirements
+   * pull in opposite directions. Using one value for both is fine in light
+   * mode by luck, and fails in dark mode by arithmetic: indigo dark enough to
+   * carry white text measures 3.68:1 against a near-black page, so every
+   * inline link in the app sat below AA while the buttons passed.
+   *
+   * Light mode happens to be able to share the value (5.87:1 on --background),
+   * and it is still written out separately so the dark override has something
+   * to override and the roles stay distinguishable.
+   *
+   * Named for its commonest use, but it covers BRAND-COLOURED TEXT generally —
+   * the active step in the tailoring stepper uses it too, for the same reason a
+   * link does: it is the brand hue sitting on the page rather than under it.
+   */
+  --link: #4f46e5;
 
   --accent: #eef2ff;
   --accent-foreground: #3730a3;
 
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #6366f1;
+  /* ── Lines ────────────────────────────────────────────────────────────── */
+  --border: #e2e6ee;
+  /* For controls the user is meant to aim at — inputs, selects, checkboxes.
+     A form field bounded by the same hairline as a card reads as decoration
+     rather than as something you can type into. */
+  --border-strong: #cbd2e0;
+  --input: #cbd2e0;
+  --ring: #4f46e5;
 
-  --success: #16a34a;
-  --warning: #d97706;
-  --danger: #dc2626;
+  /* ── Status ───────────────────────────────────────────────────────────── */
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --info: #0369a1;
 
+  /* ── Score bands (0–100 match scores) ─────────────────────────────────── */
+  --score-strong: #15803d;
+  --score-fair: #b45309;
+  --score-weak: #64748b;
+
+  /* ── Shape ────────────────────────────────────────────────────────────── */
   --radius: 0.625rem;
+
+  /* ── Elevation ────────────────────────────────────────────────────────── */
+  /* Light mode lifts with soft shadow; dark mode cannot (see below). */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-md: 0 1px 3px 0 rgb(15 23 42 / 0.07), 0 1px 2px -1px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 10px 24px -6px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.06);
 }
 
+/*
+ * Dark theme.
+ *
+ * Not the light palette inverted. Two things change in kind rather than in
+ * degree:
+ *
+ *   1. STATUS FOREGROUNDS GET LIGHTER, NOT DARKER. `#b91c1c` on a dark card is
+ *      3:1 and unreadable at 13px; the 400-weight equivalents are the ones that
+ *      carry.
+ *   2. SHADOWS STOP WORKING. A drop shadow on a dark surface is invisible, so
+ *      elevation is carried by `--elevated` and `--border` instead, and the
+ *      shadow variables are dialled back to near-nothing rather than left to
+ *      render as grey mud.
+ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b1120;
-    --foreground: #e2e8f0;
+    --background: #090c14;
+    --foreground: #e7ecf5;
 
-    --card: #111827;
-    --card-foreground: #e2e8f0;
+    --card: #11151f;
+    --card-foreground: #e7ecf5;
+    --elevated: #171c28;
 
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
+    --muted: #1b212e;
+    --muted-foreground: #98a3ba;
 
-    --primary: #6366f1;
+    --primary: #5d55ea;
     --primary-foreground: #ffffff;
+    --primary-hover: #6f68ee;
+    --primary-soft: color-mix(in srgb, var(--primary) 18%, var(--card));
+
+    /* indigo-400. 6.55:1 on --background, 6.12:1 on --card — the same hue
+       family as --primary, two steps lighter so it reads as text. */
+    --link: #818cf8;
 
     --accent: #1e1b4b;
     --accent-foreground: #c7d2fe;
 
-    --border: #1e293b;
-    --input: #1e293b;
-    --ring: #818cf8;
+    --border: #222939;
+    --border-strong: #333c50;
+    --input: #333c50;
+    --ring: #7c76f0;
 
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --danger: #ef4444;
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --danger: #f87171;
+    --info: #60a5fa;
+
+    --score-strong: #4ade80;
+    --score-fair: #fbbf24;
+    --score-weak: #7c8699;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 12px 28px -8px rgb(0 0 0 / 0.6);
   }
+}
+
+/*
+ * Soft backgrounds and borders, derived rather than declared.
+ *
+ * These sit outside the theme blocks on purpose. A custom property is
+ * substituted at computed-value time on the element that uses it, so a
+ * `color-mix()` written once against `var(--danger)` and `var(--card)`
+ * re-resolves per theme automatically. Declaring eight more hex values in the
+ * dark block would work exactly once and then rot the first time a status
+ * colour is adjusted in only one of the two places.
+ */
+:root {
+  --success-soft: color-mix(in srgb, var(--success) 12%, var(--card));
+  --success-border: color-mix(in srgb, var(--success) 34%, var(--card));
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, var(--card));
+  --warning-border: color-mix(in srgb, var(--warning) 34%, var(--card));
+  --danger-soft: color-mix(in srgb, var(--danger) 11%, var(--card));
+  --danger-border: color-mix(in srgb, var(--danger) 32%, var(--card));
+  --info-soft: color-mix(in srgb, var(--info) 11%, var(--card));
+  --info-border: color-mix(in srgb, var(--info) 32%, var(--card));
 }
 
 @theme inline {
@@ -64,21 +183,48 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-elevated: var(--elevated);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-link: var(--link);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
   --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
   --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-border: var(--danger-border);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-border: var(--info-border);
+
+  --color-score-strong: var(--score-strong);
+  --color-score-fair: var(--score-fair);
+  --color-score-weak: var(--score-weak);
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -90,4 +236,48 @@
 body {
   background: var(--background);
   color: var(--foreground);
+  /* Dashboard screens stack numbers in columns; proportional digits make a
+     score of 100 wider than 88 and the column stops lining up. */
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * ONE focus ring for the entire app, defined once.
+ *
+ * Per-component focus styling is how an app ends up with three different rings
+ * and a handful of controls that have none. `:focus-visible` rather than
+ * `:focus` so a mouse click on a button does not leave a ring behind, while
+ * keyboard traversal always shows one.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: calc(var(--radius) - 4px);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+/* Scrollbars inside dark panels default to a light track in some browsers,
+   which puts a bright stripe down the side of every scrollable table. */
+* {
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/*
+ * Motion is opt-out at the platform level, so honour it globally rather than
+ * per-animation. Kept as near-zero rather than `none`: some components read
+ * transition end events, and removing the transition entirely stops those
+ * firing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

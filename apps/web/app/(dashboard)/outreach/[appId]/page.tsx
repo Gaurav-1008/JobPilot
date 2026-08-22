@@ -19,6 +19,15 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Page, PageHeader, Section } from "@/components/ui/page";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+
 interface Finding {
   check: string;
   severity: "block" | "flag";
@@ -80,6 +89,7 @@ export default function ReviewPage({
   >(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<"info" | "success" | "danger">("info");
   const [approved, setApproved] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
@@ -111,6 +121,11 @@ export default function ReviewPage({
     setEdits({ attemptId: draft.id, body, subject, ...patch });
   };
 
+  function say(message: string, tone: "info" | "success" | "danger" = "info") {
+    setNotice(message);
+    setNoticeTone(tone);
+  }
+
   async function generate(contactId: string) {
     setBusy(true); setNotice(null); setApproved(false);
     const res = await fetch("/api/outreach/generate", {
@@ -122,14 +137,14 @@ export default function ReviewPage({
     setBusy(false);
 
     if (!res.ok) {
-      setNotice(data.error ?? "Could not generate a draft.");
+      say(data.error ?? "Could not generate a draft.", "danger");
       return;
     }
     setAttemptId(data.attemptId);
     setEdits(null);
     setSubjectOptions(data.subjectOptions ?? []);
     if (data.fellBackToTemplate) {
-      setNotice(
+      say(
         "The written draft could not be verified against your resume, so the plain template was used instead.",
       );
     }
@@ -145,14 +160,14 @@ export default function ReviewPage({
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) { setNotice(data.error ?? "Could not save."); return; }
+    if (!res.ok) { say(data.error ?? "Could not save.", "danger"); return; }
 
     // The server destroyed the approval row on edit; drop the local token too,
     // so the UI cannot offer a Send that the interlocks would only reject.
     setApproved(false);
     setToken(null);
     setEdits(null);
-    setNotice("Saved. Because the text changed, approve it again before sending.");
+    say("Saved. Because the text changed, approve it again before sending.");
     void qc.invalidateQueries({ queryKey: ["attempt", attemptId] });
   }
 
@@ -166,14 +181,15 @@ export default function ReviewPage({
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) { setNotice(data.error ?? "Could not approve."); return; }
+    if (!res.ok) { say(data.error ?? "Could not approve.", "danger"); return; }
     // The token is a capability held only by this tab, for one send. It is
     // deliberately NOT persisted: a token in localStorage would survive a
     // reload and quietly turn "approved a minute ago" into "approved whenever".
     setToken(data.token);
     setApproved(true);
-    setNotice(
+    say(
       `Approved. This expires in ${data.expiresInMinutes ?? 10} minutes — send it before then.`,
+      "success",
     );
   }
 
@@ -193,12 +209,13 @@ export default function ReviewPage({
     setApproved(false);
     setToken(null);
     if (!res.ok) {
-      setNotice(
+      say(
         data.error ??
           "Blocked. Check the outreach log for which safeguard stopped it.",
+        "danger",
       );
     } else {
-      setNotice(data.message ?? `Done — status: ${data.status}.`);
+      say(data.message ?? `Done — status: ${data.status}.`, "success");
     }
     void qc.invalidateQueries({ queryKey: ["attempt", attemptId] });
   }
@@ -209,7 +226,7 @@ export default function ReviewPage({
     await fetch(`/api/outreach/${attemptId}/skip`, { method: "POST" });
     setBusy(false);
     setAttemptId(null);
-    setNotice("Skipped. It stays in your log, and you can write another later.");
+    say("Skipped. It stays in your log, and you can write another later.");
   }
 
   const contacts = contactsData?.contacts ?? [];
@@ -228,66 +245,51 @@ export default function ReviewPage({
    * The block is surfaced here instead, and Approve is disabled until the text
    * fits. Editing stays available, because shortening the body is the fix.
    */
-  const overLimit =
-    draft !== undefined && draft.wordCount > draft.wordLimit;
+  const overLimit = draft !== undefined && draft.wordCount > draft.wordLimit;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/outreach" className="text-sm underline text-muted-foreground">
-        ← All outreach
-      </Link>
-
-      <h1 className="mt-4 text-2xl font-semibold">Write an email</h1>
-      {draft && (
-        <p className="mt-1 text-sm text-muted-foreground">
-          {draft.job.title} · {draft.job.company}
-        </p>
-      )}
+    <Page width="content">
+      <PageHeader
+        back={{ href: "/outreach", label: "All outreach" }}
+        title="Write an email"
+        description={draft ? `${draft.job.title} · ${draft.job.company}` : undefined}
+      />
 
       {/* ── Pick a recipient ─────────────────────────────────────────── */}
       {!attemptId && (
-        <section className="mt-8">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            Who are you writing to?
-          </h2>
-          {contacts.length === 0 && (
-            <p className="mt-2 text-sm text-muted-foreground">
-              No contacts on this application yet. Add one from the outreach
-              list first.
-            </p>
-          )}
-          <ul className="mt-3 space-y-2">
-            {contacts.map((c) => (
-              <li
-                key={c.id}
-                className="flex items-center justify-between gap-3 rounded border border-border bg-card px-3 py-2"
-              >
-                <span className="text-sm">
-                  {c.recipientName ? `${c.recipientName} · ` : ""}
-                  <span className="font-mono text-xs">
-                    {c.recipientEmailDisplay}
-                  </span>
-                </span>
-                <button
-                  onClick={() => generate(c.id)}
-                  disabled={busy}
-                  className="shrink-0 rounded bg-black px-3 py-1 text-sm text-white disabled:opacity-50"
+        <Section title="Who are you writing to?" className="mt-8">
+          {contacts.length === 0 ? (
+            <Alert tone="neutral">
+              No contacts on this application yet.{" "}
+              <Link href="/outreach">Add one from the outreach list</Link> first.
+            </Alert>
+          ) : (
+            <ul className="space-y-2">
+              {contacts.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 shadow-sm"
                 >
-                  {busy ? "Writing…" : "Write draft"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+                  <span className="min-w-0 text-sm">
+                    {c.recipientName ? `${c.recipientName} · ` : ""}
+                    <span className="font-mono text-xs">
+                      {c.recipientEmailDisplay}
+                    </span>
+                  </span>
+                  <Button size="sm" onClick={() => generate(c.id)} loading={busy}>
+                    {busy ? "Writing…" : "Write draft"}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
       )}
 
       {notice && (
-        <p
-          role="status"
-          className="mt-6 rounded border border-border bg-card p-3 text-sm"
-        >
+        <Alert role="status" tone={noticeTone} className="mt-6">
           {notice}
-        </p>
+        </Alert>
       )}
 
       {draft && (
@@ -320,149 +322,168 @@ export default function ReviewPage({
            *      warnings as part of the control's description, so the risk is
            *      restated at the moment of the decision rather than only when
            *      it first appeared.
+           *
+           * THE REDESIGN DOES NOT RELAX ANY OF THIS. These were previously
+           * hand-built panels using `bg-red-50 text-red-900`, which on a dark
+           * theme rendered the gate's own text at roughly 1.1:1 against its
+           * container — perceivable in exactly the sense that matters least.
+           * The tone tokens fix the contrast; the roles and ids below are
+           * carried over unchanged.
            * ══════════════════════════════════════════════════════════════
            */}
 
-          {/* EC-P7-23 — the platform overrides the user's send setting, and
-              this is where that has to be said: before the work, not after. */}
-          {draft.platformDryRunReason && (
-            <section
-              role="status"
-              className="mt-6 rounded border border-sky-300 bg-sky-50 p-4 text-sm text-sky-900"
-            >
-              {draft.platformDryRunReason}
-            </section>
-          )}
+          <div className="mt-6 space-y-4">
+            {/* EC-P7-23 — the platform overrides the user's send setting, and
+                this is where that has to be said: before the work, not after. */}
+            {draft.platformDryRunReason && (
+              <Alert role="status" tone="info">
+                {draft.platformDryRunReason}
+              </Alert>
+            )}
 
-          {/* ── Guardrail findings ───────────────────────────────────── */}
-          {overLimit && (
-            <section
-              id="warn-length"
-              role="alert"
-              className="mt-6 rounded border border-red-300 bg-red-50 p-4"
-            >
-              <h2 className="text-sm font-medium text-red-900">
-                Too long to send — {draft.wordCount} words, limit {draft.wordLimit}
-              </h2>
-              <p className="mt-2 text-sm text-red-900">
-                This will be refused at send time, so approving it cannot help.
-                Shorten the body below and save, and the limit check clears.
-              </p>
-              <p className="mt-2 text-xs text-red-800">
-                Long emails usually mean the background on your{" "}
-                <Link href="/profile" className="underline">
-                  profile
-                </Link>{" "}
-                is a full bio. It gets dropped into one sentence — “I’m NAME,
-                with a background in …” — so a short phrase works far better
-                than a paragraph.
-              </p>
-            </section>
-          )}
+            {/* ── Guardrail findings ───────────────────────────────────── */}
+            {overLimit && (
+              <Alert
+                id="warn-length"
+                role="alert"
+                tone="danger"
+                title={`Too long to send — ${draft.wordCount} words, limit ${draft.wordLimit}`}
+              >
+                <p>
+                  This will be refused at send time, so approving it cannot help.
+                  Shorten the body below and save, and the limit check clears.
+                </p>
+                <p className="text-xs">
+                  Long emails usually mean the background on your{" "}
+                  <Link href="/profile">profile</Link> is a full bio. It gets
+                  dropped into one sentence — “I’m NAME, with a background in …”
+                  — so a short phrase works far better than a paragraph.
+                </p>
+              </Alert>
+            )}
 
-          {blocking.length > 0 && (
-            <section
-              id="warn-grounding"
-              role="alert"
-              className="mt-6 rounded border border-red-300 bg-red-50 p-4"
-            >
-              <h2 className="text-sm font-medium text-red-900">
-                These claims are not supported by your resume
-              </h2>
-              <ul className="mt-2 space-y-1 text-sm text-red-900">
-                {blocking.map((f, i) => (
-                  <li key={i}>
-                    {f.message}
-                    {f.evidence && (
-                      <span className="ml-1 font-mono text-xs">
-                        ({f.evidence})
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {/* EC-P5-37: after an edit these are warnings, not a gate. The
-                  user is the author of their own words — but they are told. */}
-              <p className="mt-2 text-xs text-red-800">
-                You can still send this. These are your words, and the decision
-                is yours — but nothing here backs them up.
-              </p>
-            </section>
-          )}
+            {blocking.length > 0 && (
+              <Alert
+                id="warn-grounding"
+                role="alert"
+                tone="danger"
+                title="These claims are not supported by your resume"
+              >
+                <ul className="space-y-1">
+                  {blocking.map((f, i) => (
+                    <li key={i}>
+                      {f.message}
+                      {f.evidence && (
+                        <span className="ml-1 font-mono text-xs">({f.evidence})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {/* EC-P5-37: after an edit these are warnings, not a gate. The
+                    user is the author of their own words — but they are told. */}
+                <p className="text-xs">
+                  You can still send this. These are your words, and the decision
+                  is yours — but nothing here backs them up.
+                </p>
+              </Alert>
+            )}
 
-          {flags.length > 0 && (
-            /* role="status", not "alert": these are advisory, and an assertive
-               region for every soft flag would train the user to ignore the
-               region that carries the blocking ones. */
-            <section
-              id="warn-flags"
-              role="status"
-              className="mt-4 rounded border border-amber-300 bg-amber-50 p-4"
-            >
-              <h2 className="text-sm font-medium text-amber-900">Worth checking</h2>
-              <ul className="mt-2 space-y-1 text-sm text-amber-900">
-                {flags.map((f, i) => (
-                  <li key={i}>{f.message}</li>
-                ))}
-              </ul>
-            </section>
-          )}
+            {flags.length > 0 && (
+              /* role="status", not "alert": these are advisory, and an assertive
+                 region for every soft flag would train the user to ignore the
+                 region that carries the blocking ones. */
+              <Alert
+                id="warn-flags"
+                role="status"
+                tone="warning"
+                title="Worth checking"
+              >
+                <ul className="space-y-1">
+                  {flags.map((f, i) => (
+                    <li key={i}>{f.message}</li>
+                  ))}
+                </ul>
+              </Alert>
+            )}
 
-          {/* EC-P5-59: the audit trail can under-report in exactly one
-              direction, and this is where the user finds out. */}
-          {draft.status === "failed" && draft.providerAttemptedAt && (
-            <section className="mt-4 rounded border border-amber-400 bg-amber-50 p-4 text-sm text-amber-900">
-              This attempt reached the provider before it failed, so a draft may
-              have been created anyway. Check your mailbox before retrying.
-            </section>
-          )}
+            {/* EC-P5-59: the audit trail can under-report in exactly one
+                direction, and this is where the user finds out. */}
+            {draft.status === "failed" && draft.providerAttemptedAt && (
+              <Alert tone="warning">
+                This attempt reached the provider before it failed, so a draft
+                may have been created anyway. Check your mailbox before
+                retrying.
+              </Alert>
+            )}
+          </div>
 
           {/* ── The draft ────────────────────────────────────────────── */}
           <section className="mt-8">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-sm font-medium text-muted-foreground">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 To {draft.contact.name ?? draft.contact.email}
               </h2>
-              <span className="text-xs text-muted-foreground">
+              <span
+                className={cn(
+                  "text-xs tabular-nums",
+                  overLimit ? "font-medium text-danger" : "text-muted-foreground",
+                )}
+              >
                 {draft.wordCount}/{draft.wordLimit} words ·{" "}
                 {draft.generationSource === "llm" ? "written" : "template"}
               </span>
             </div>
 
             {subjectOptions.length > 1 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {subjectOptions.map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => edit({ subject: option })}
-                    className={`rounded border px-2 py-1 text-xs ${
-                      subject === option ? "border-black bg-black text-white" : ""
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
+              <fieldset className="mt-4">
+                <legend className="text-sm font-medium">Subject options</legend>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {subjectOptions.map((option) => {
+                    const active = subject === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => edit({ subject: option })}
+                        className={cn(
+                          "min-h-9 cursor-pointer rounded-md border px-3 text-xs transition-colors duration-150",
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border-strong bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
             )}
 
-            <label className="mt-4 block">
-              <span className="text-xs text-muted-foreground">Subject</span>
-              <input
-                value={subject}
-                onChange={(e) => edit({ subject: e.target.value })}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              />
-            </label>
+            <div className="mt-4 space-y-4">
+              <Field label="Subject">
+                {(p) => (
+                  <Input
+                    {...p}
+                    value={subject}
+                    onChange={(e) => edit({ subject: e.target.value })}
+                  />
+                )}
+              </Field>
 
-            <label className="mt-3 block">
-              <span className="text-xs text-muted-foreground">Body</span>
-              <textarea
-                rows={14}
-                value={body}
-                onChange={(e) => edit({ body: e.target.value })}
-                className="mt-1 w-full rounded border px-3 py-2 font-mono text-xs"
-              />
-            </label>
+              <Field label="Body">
+                {(p) => (
+                  <Textarea
+                    {...p}
+                    rows={14}
+                    value={body}
+                    onChange={(e) => edit({ body: e.target.value })}
+                    className="min-h-72 font-mono text-xs"
+                  />
+                )}
+              </Field>
+            </div>
 
             {/*
              * EC-P7-08 — RISK MUST BE VISIBLE WITHOUT SCROLLING, AT THE ACTION.
@@ -479,7 +500,7 @@ export default function ReviewPage({
              * written down.
              */}
             {(blocking.length > 0 || flags.length > 0 || overLimit) && (
-              <p className="mt-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <Alert tone="warning" className="mt-4 p-3 text-xs">
                 <a href="#warn-grounding" className="font-medium underline">
                   {overLimit && "Too long to send"}
                   {overLimit && (blocking.length > 0 || flags.length > 0) && " · "}
@@ -490,18 +511,15 @@ export default function ReviewPage({
                     `${flags.length} thing${flags.length === 1 ? "" : "s"} worth checking`}
                 </a>{" "}
                 — details above.
-              </p>
+              </Alert>
             )}
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                onClick={save}
-                disabled={busy || !dirty}
-                className="rounded border px-4 py-2 text-sm disabled:opacity-50"
-              >
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={save} disabled={busy || !dirty}>
                 Save changes
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
                 onClick={approve}
                 disabled={busy || dirty || approved || overLimit}
                 /*
@@ -511,24 +529,20 @@ export default function ReviewPage({
                  * assistive technology, so this needs no conditional logic.
                  */
                 aria-describedby="warn-length warn-grounding warn-flags approve-hint"
-                className="rounded border px-4 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
               >
                 {approved ? "Approved" : "Approve"}
-              </button>
-              <button
-                onClick={deliver}
-                disabled={busy || !approved}
-                className="rounded bg-black px-4 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={deliver} disabled={busy || !approved}>
                 Send
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={skip}
                 disabled={busy}
-                className="ml-auto rounded px-4 py-2 text-sm text-muted-foreground underline disabled:opacity-50"
+                className="ml-auto"
               >
                 Skip this one
-              </button>
+              </Button>
             </div>
 
             {/*
@@ -537,7 +551,7 @@ export default function ReviewPage({
              * accessibility failure that also frustrates everyone else — the
              * user cannot tell "not yet" from "broken".
              */}
-            <p id="approve-hint" className="mt-2 text-xs text-muted-foreground">
+            <p id="approve-hint" className="mt-2 text-xs leading-relaxed text-muted-foreground">
               {dirty
                 ? "Save your changes before approving — approval is bound to the exact text."
                 : overLimit
@@ -551,7 +565,7 @@ export default function ReviewPage({
           <EvidencePanel payload={draft.payload} />
         </>
       )}
-    </main>
+    </Page>
   );
 }
 
@@ -564,72 +578,71 @@ export default function ReviewPage({
 function EvidencePanel({ payload }: { payload: Payload | null }) {
   if (!payload) {
     return (
-      <section className="mt-8 rounded border border-border bg-card p-4">
-        <h2 className="text-sm font-medium">Evidence</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          No tailoring evidence — this is a generic template email. Tailor your
-          resume for this job first if you want the draft to cite specifics.
-        </p>
-      </section>
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Evidence</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            No tailoring evidence — this is a generic template email. Tailor your
+            resume for this job first if you want the draft to cite specifics.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
+  const ITEMS: [string, React.ReactNode][] = [
+    [
+      "Skills this role asks for that your resume backs up",
+      payload.topMatchedSkills.length > 0
+        ? payload.topMatchedSkills.join(", ")
+        : "None found — that is why the hook is generic.",
+    ],
+    ...(payload.strongestBullet
+      ? ([["Strongest accomplishment cited", <em key="b">{payload.strongestBullet}</em>]] as [
+          string,
+          React.ReactNode,
+        ][])
+      : []),
+    ...(payload.jdHooks.length > 0
+      ? ([["What the job description emphasises", payload.jdHooks.join(" · ")]] as [
+          string,
+          React.ReactNode,
+        ][])
+      : []),
+    ["Match score", `${payload.matchScore}/100`],
+    // EC-P5-24: gaps are a suppression list. Shown here so the user knows they
+    // were withheld — never written into the body.
+    ...(payload.honestGaps.length > 0
+      ? ([
+          [
+            "Deliberately not claimed",
+            `${payload.honestGaps.join(", ")} — kept out of the email on purpose.`,
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+  ];
+
   return (
-    <section className="mt-8 rounded border border-border bg-card p-4">
-      <h2 className="text-sm font-medium">Evidence behind this email</h2>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Every item here comes from your saved tailoring run. Nothing was
-        invented for the email.
-      </p>
-
-      <dl className="mt-4 space-y-3 text-sm">
-        <div>
-          <dt className="text-xs text-muted-foreground">
-            Skills this role asks for that your resume backs up
-          </dt>
-          <dd>
-            {payload.topMatchedSkills.length > 0
-              ? payload.topMatchedSkills.join(", ")
-              : "None found — that is why the hook is generic."}
-          </dd>
-        </div>
-
-        {payload.strongestBullet && (
-          <div>
-            <dt className="text-xs text-muted-foreground">
-              Strongest accomplishment cited
-            </dt>
-            <dd className="italic">{payload.strongestBullet}</dd>
-          </div>
-        )}
-
-        {payload.jdHooks.length > 0 && (
-          <div>
-            <dt className="text-xs text-muted-foreground">
-              What the job description emphasises
-            </dt>
-            <dd>{payload.jdHooks.join(" · ")}</dd>
-          </div>
-        )}
-
-        <div>
-          <dt className="text-xs text-muted-foreground">Match score</dt>
-          <dd>{payload.matchScore}/100</dd>
-        </div>
-
-        {payload.honestGaps.length > 0 && (
-          <div>
-            <dt className="text-xs text-muted-foreground">
-              Deliberately not claimed
-            </dt>
-            {/* EC-P5-24: gaps are a suppression list. Shown here so the user
-                knows they were withheld — never written into the body. */}
-            <dd>
-              {payload.honestGaps.join(", ")} — kept out of the email on purpose.
-            </dd>
-          </div>
-        )}
-      </dl>
-    </section>
+    <Card className="mt-8">
+      <CardHeader>
+        <CardTitle>Evidence behind this email</CardTitle>
+        <CardDescription>
+          Every item here comes from your saved tailoring run. Nothing was
+          invented for the email.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="divide-y divide-border text-sm">
+          {ITEMS.map(([term, value]) => (
+            <div key={term} className="py-3 first:pt-0 last:pb-0">
+              <dt className="text-xs text-muted-foreground">{term}</dt>
+              <dd className="mt-1 leading-relaxed">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
   );
 }

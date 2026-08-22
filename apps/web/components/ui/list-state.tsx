@@ -23,9 +23,14 @@
  * ═════════════════════════════════════════════════════════════════════════
  */
 
+import type { LucideIcon } from "lucide-react";
+import { FilterX, Inbox } from "lucide-react";
 import Link from "next/link";
 
+import { Alert } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 /**
  * P7.1.2 — a skeleton, not a spinner.
@@ -37,12 +42,67 @@ import { Skeleton } from "@/components/ui/skeleton";
  * `aria-busy` with a label, because the visual metaphor conveys nothing to a
  * screen reader — without it the region is simply silent while it loads.
  */
-export function ListLoading({ rows = 3, label = "Loading" }: { rows?: number; label?: string }) {
+export function ListLoading({
+  rows = 3,
+  label = "Loading",
+  className,
+}: {
+  rows?: number;
+  label?: string;
+  className?: string;
+}) {
   return (
-    <div role="status" aria-busy="true" aria-label={label} className="mt-4 space-y-2">
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label={label}
+      className={cn("space-y-2", className)}
+    >
       {Array.from({ length: rows }, (_, i) => (
-        <Skeleton key={i} className="h-14 w-full" />
+        <div
+          key={i}
+          className="flex items-center gap-4 rounded-lg border border-border bg-card p-4"
+        >
+          {/* Shaped like a row rather than a plain bar: a score cell, two lines
+              of text, and a trailing meta column. The point of a skeleton is
+              that the layout does not jump when the data lands. */}
+          <Skeleton className="size-10 shrink-0 rounded-md" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+          <Skeleton className="hidden h-3 w-16 shrink-0 sm:block" />
+        </div>
       ))}
+    </div>
+  );
+}
+
+/** Shared frame for the two "there is nothing to show" states. */
+function EmptyFrame({
+  icon: Icon,
+  title,
+  detail,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-border-strong bg-card/50 px-6 py-12 text-center">
+      <span
+        aria-hidden="true"
+        className="mx-auto grid size-11 place-items-center rounded-full bg-muted text-muted-foreground"
+      >
+        <Icon className="size-5" />
+      </span>
+      <p className="mt-4 font-medium">{title}</p>
+      <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
+        {detail}
+      </p>
+      {children && <div className="mt-5 flex justify-center">{children}</div>}
     </div>
   );
 }
@@ -62,18 +122,13 @@ export function ListEmpty({
   action?: { label: string; href: string };
 }) {
   return (
-    <div className="mt-4 rounded border border-dashed border-border bg-card/40 px-6 py-10 text-center">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{detail}</p>
+    <EmptyFrame icon={Inbox} title={title} detail={detail}>
       {action && (
-        <Link
-          href={action.href}
-          className="mt-4 inline-block rounded bg-black px-4 py-2 text-sm text-white"
-        >
+        <Link href={action.href} className={buttonVariants()}>
           {action.label}
         </Link>
       )}
-    </div>
+    </EmptyFrame>
   );
 }
 
@@ -94,20 +149,15 @@ export function ListNoMatches({
   onClear: () => void;
 }) {
   return (
-    <div className="mt-4 rounded border border-dashed border-border bg-card/40 px-6 py-10 text-center">
-      <p className="text-sm font-medium">
-        None of your {total} {noun} match these filters
-      </p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-        Nothing has been deleted — the filters are just narrower than the data.
-      </p>
-      <button
-        onClick={onClear}
-        className="mt-4 rounded border px-4 py-2 text-sm"
-      >
+    <EmptyFrame
+      icon={FilterX}
+      title={`None of your ${total} ${noun} match these filters`}
+      detail="Nothing has been deleted — the filters are just narrower than the data."
+    >
+      <Button variant="outline" onClick={onClear}>
         Clear filters
-      </button>
-    </div>
+      </Button>
+    </EmptyFrame>
   );
 }
 
@@ -144,24 +194,22 @@ export function ListError(
   return (
     // role="alert": unlike an empty state, this appeared because something went
     // wrong and the user needs to know without discovering it.
-    <div
-      role="alert"
-      className="mt-4 rounded border border-red-300 bg-red-50 px-6 py-8 text-center"
-    >
-      <p className="text-sm font-medium text-red-900">{title}</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-red-900">{detail}</p>
-      {props.onRetry ? (
-        <button onClick={props.onRetry} className="mt-4 rounded border border-red-300 px-4 py-2 text-sm">
-          Try again
-        </button>
-      ) : (
-        <Link
-          href={props.reloadHref}
-          className="mt-4 inline-block rounded border border-red-300 px-4 py-2 text-sm"
-        >
-          Reload this page
-        </Link>
-      )}
-    </div>
+    <Alert role="alert" tone="danger" title={title}>
+      <p>{detail}</p>
+      <div className="pt-2">
+        {props.onRetry ? (
+          <Button variant="outline" size="sm" onClick={props.onRetry}>
+            Try again
+          </Button>
+        ) : (
+          <Link
+            href={props.reloadHref}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Reload this page
+          </Link>
+        )}
+      </div>
+    </Alert>
   );
 }

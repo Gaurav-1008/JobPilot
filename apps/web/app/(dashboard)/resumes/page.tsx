@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Trash2, Upload } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ListEmpty, ListLoading } from "@/components/ui/list-state";
+import { Page, PageHeader } from "@/components/ui/page";
 
 interface ResumeRow {
   id: string;
@@ -14,6 +21,7 @@ interface ResumeRow {
 export default function ResumesPage() {
   const qc = useQueryClient();
   const [msg, setMsg] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
 
   // TanStack Query rather than useEffect + setState: it owns the loading and
   // empty states, and — the reason that matters — queryClient.clear() on sign
@@ -35,13 +43,14 @@ export default function ResumesPage() {
       return d as { version: number; warnings?: string[] };
     },
     onSuccess: (d) => {
+      setIsError(false);
       setMsg(d.warnings?.length
         ? `Saved as v${d.version}. ${d.warnings.join(" ")}`
         : `Saved as v${d.version}.`);
       void refresh();
     },
     // Extraction failures carry an actionable message pointing at paste.
-    onError: (e: Error) => setMsg(e.message),
+    onError: (e: Error) => { setIsError(true); setMsg(e.message); },
   });
 
   function upload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -59,74 +68,93 @@ export default function ResumesPage() {
 
   async function remove(id: string) {
     const res = await fetch(`/api/resumes/${id}`, { method: "DELETE" });
-    if (!res.ok) setMsg((await res.json().catch(() => ({}))).message ?? "Could not delete.");
+    if (!res.ok) {
+      setIsError(true);
+      setMsg((await res.json().catch(() => ({}))).message ?? "Could not delete.");
+    }
     void refresh();
   }
 
   const busy = uploadMutation.isPending;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Resumes</h1>
-      <p className="mt-1 text-sm text-neutral-600">
-        Upload once. The default is what gets scored against jobs.
-      </p>
+    <Page width="content">
+      <PageHeader
+        title="Resumes"
+        description="Upload once. The default is what gets scored against jobs."
+      />
 
-      <div className="mt-6">
-        <label className="inline-block cursor-pointer rounded border px-4 py-2 text-sm">
+      <div className="mt-8 space-y-3">
+        {/*
+         * A file input has no styleable button, so the control is a label with
+         * the input hidden inside it. `cursor-pointer` and the min height are
+         * explicit because a label is not a button and inherits neither.
+         */}
+        <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-card px-4 text-sm font-medium shadow-sm transition-colors hover:bg-muted focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--ring)]">
+          <Upload className="size-4" aria-hidden="true" />
           {busy ? "Parsing…" : "Upload PDF, DOCX, or TXT"}
           <input
             type="file" accept=".pdf,.docx,.txt" onChange={upload}
-            disabled={busy} className="hidden"
+            disabled={busy} className="sr-only"
           />
         </label>
-        {msg && <p role="status" className="mt-3 text-sm text-neutral-700">{msg}</p>}
+
+        {msg && (
+          <Alert role="status" tone={isError ? "danger" : "success"}>
+            {msg}
+          </Alert>
+        )}
       </div>
 
       {/* Three distinct states, never shared: loading, empty, populated
           (EC-P7-01). A shared component makes a slow query look like no data. */}
       {isPending ? (
-        <p className="mt-8 text-sm text-neutral-500">Loading…</p>
+        <ListLoading rows={3} label="Loading your resumes" className="mt-8" />
       ) : !rows || rows.length === 0 ? (
-        <p className="mt-8 text-sm text-neutral-500">
-          No resumes yet. Upload one to get started.
-        </p>
+        <div className="mt-8">
+          <ListEmpty
+            title="No resumes yet"
+            detail="Upload one to get started — it becomes your default, and every job on the board is scored against it."
+          />
+        </div>
       ) : (
-        <ul className="mt-8 divide-y rounded border">
+        <ul className="mt-8 space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-4 px-4 py-3">
-              <div>
-                <span className="font-medium">v{r.version}</span>
-                {r.isDefault && (
-                  <span className="ml-2 rounded bg-black px-2 py-0.5 text-xs text-white">
-                    default
-                  </span>
-                )}
-                <div className="text-sm text-neutral-500">
+            <li
+              key={r.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4 shadow-sm"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">v{r.version}</span>
+                  {r.isDefault && <Badge variant="accent">default</Badge>}
+                </div>
+                <p className="mt-0.5 truncate text-sm text-muted-foreground">
                   {r.originalFilename ?? "pasted"} ·{" "}
                   {new Date(r.createdAt).toLocaleDateString()}
-                </div>
+                </p>
               </div>
-              <div className="flex gap-2">
+
+              <div className="flex shrink-0 gap-2">
                 {!r.isDefault && (
-                  <button
-                    onClick={() => makeDefault(r.id)}
-                    className="rounded border px-3 py-1 text-sm"
-                  >
+                  <Button variant="outline" size="sm" onClick={() => makeDefault(r.id)}>
                     Make default
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button
+                  variant="destructive"
+                  size="sm"
                   onClick={() => remove(r.id)}
-                  className="rounded border px-3 py-1 text-sm text-red-600"
+                  aria-label={`Delete resume v${r.version}`}
                 >
+                  <Trash2 className="size-4" aria-hidden="true" />
                   Delete
-                </button>
+                </Button>
               </div>
             </li>
           ))}
         </ul>
       )}
-    </main>
+    </Page>
   );
 }

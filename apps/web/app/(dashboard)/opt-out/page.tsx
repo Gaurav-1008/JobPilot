@@ -10,6 +10,15 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ShieldOff, X } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { ListLoading } from "@/components/ui/list-state";
+import { Page, PageHeader, Section } from "@/components/ui/page";
 
 interface OptOutRow {
   email: string;
@@ -59,92 +68,94 @@ export default function OptOutPage() {
   const entries = data?.entries ?? [];
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Opt-out list</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Nobody on this list can be emailed. It is checked at send time, so
-        adding someone here blocks contacts that already exist.
-      </p>
+    <Page width="narrow">
+      <PageHeader
+        back={{ href: "/outreach", label: "Outreach" }}
+        title="Opt-out list"
+        description="Nobody on this list can be emailed. It is checked at send time, so adding someone here blocks contacts that already exist."
+      />
 
       <form
-        className="mt-6 space-y-3"
+        className="mt-8 space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           add.mutate();
         }}
       >
-        <label className="block">
-          <span className="text-xs text-muted-foreground">
-            Email address, or a whole domain as @company.com
-          </span>
-          <input
-            type="text"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="priya@company.com"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted-foreground">Reason (optional)</span>
-          <input
-            type="text"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Asked not to be contacted"
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
-          />
-        </label>
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={add.isPending || !email}
-          className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+        <Field
+          label="Email address"
+          required
+          hint="Or a whole domain, written as @company.com."
+          error={error}
         >
+          {(p) => (
+            <Input
+              {...p}
+              type="text"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="priya@company.com"
+            />
+          )}
+        </Field>
+
+        <Field label="Reason" hint="Optional — kept for your own record only.">
+          {(p) => (
+            <Input
+              {...p}
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Asked not to be contacted"
+            />
+          )}
+        </Field>
+
+        <Button type="submit" loading={add.isPending} disabled={!email}>
+          {!add.isPending && <ShieldOff className="size-4" aria-hidden="true" />}
           {add.isPending ? "Adding…" : "Add to opt-out list"}
-        </button>
+        </Button>
       </form>
 
-      <section className="mt-10">
-        <h2 className="text-sm font-medium text-muted-foreground">
-          Suppressed ({entries.length})
-        </h2>
-        {isPending && <p className="mt-2 text-sm text-muted-foreground">Loading…</p>}
-        {!isPending && entries.length === 0 && (
-          <p className="mt-2 text-sm text-muted-foreground">Nothing suppressed yet.</p>
-        )}
-        <ul className="mt-3 space-y-2">
-          {entries.map((entry) => (
-            <li
-              key={entry.email}
-              className="flex items-center justify-between gap-3 rounded border border-border bg-card px-3 py-2 text-sm"
-            >
-              <span>
-                <span className="font-mono text-xs">{entry.emailDisplay}</span>
-                {entry.isDomain && (
-                  <span className="ml-2 rounded bg-accent px-2 py-0.5 text-xs text-accent-foreground">
-                    whole domain
-                  </span>
-                )}
-                {entry.reason && (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {entry.reason}
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={() => remove.mutate(entry.email)}
-                className="shrink-0 text-xs underline text-muted-foreground"
+      <Section title={`Suppressed (${entries.length})`} className="mt-10">
+        {isPending ? (
+          <ListLoading rows={2} label="Loading the opt-out list" />
+        ) : entries.length === 0 ? (
+          <Alert tone="neutral">
+            Nothing suppressed yet. Anyone added here is blocked at send time,
+            permanently, across every application.
+          </Alert>
+        ) : (
+          <ul className="space-y-2">
+            {entries.map((entry) => (
+              <li
+                key={entry.email}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 shadow-sm"
               >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs">{entry.emailDisplay}</span>
+                    {entry.isDomain && <Badge variant="warning">whole domain</Badge>}
+                  </div>
+                  {entry.reason && (
+                    <p className="text-xs text-muted-foreground">{entry.reason}</p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => remove.mutate(entry.email)}
+                  aria-label={`Remove ${entry.emailDisplay} from the opt-out list`}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </Page>
   );
 }

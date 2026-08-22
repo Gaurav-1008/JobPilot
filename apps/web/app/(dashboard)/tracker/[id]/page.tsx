@@ -10,8 +10,14 @@
  */
 
 import { use, useState } from "react";
-import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { Badge } from "@/components/ui/badge";
+import { Field } from "@/components/ui/field";
+import { ListLoading } from "@/components/ui/list-state";
+import { Page, PageHeader, Section } from "@/components/ui/page";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Attempt {
   id: string;
@@ -46,12 +52,15 @@ const STATUSES = [
   "emailed", "replied", "interviewing", "rejected", "closed",
 ] as const;
 
-const ATTEMPT_TONE: Record<string, string> = {
-  sent: "text-green-700",
-  drafted: "text-green-700",
-  failed: "text-red-700",
-  skipped: "text-muted-foreground",
-  generated: "text-amber-700",
+const ATTEMPT_TONE: Record<
+  string,
+  "success" | "danger" | "warning" | "secondary"
+> = {
+  sent: "success",
+  drafted: "success",
+  failed: "danger",
+  skipped: "secondary",
+  generated: "warning",
 };
 
 export default function TrackerDetailPage({
@@ -85,94 +94,101 @@ export default function TrackerDetailPage({
   });
 
   if (isPending) {
-    return <main className="p-8 text-sm text-muted-foreground">Loading…</main>;
+    return (
+      <Page width="content">
+        <ListLoading rows={4} label="Loading this application" />
+      </Page>
+    );
   }
   if (!data) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-xl font-semibold">Not found</h1>
-        <Link href="/tracker" className="mt-3 inline-block text-sm underline">
-          ← Tracker
-        </Link>
-      </main>
+      <Page width="content">
+        <PageHeader title="Not found" back={{ href: "/tracker", label: "Tracker" }} />
+      </Page>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/tracker" className="text-sm underline text-muted-foreground">
-        ← Tracker
-      </Link>
+    <Page width="content">
+      <PageHeader
+        back={{ href: "/tracker", label: "Tracker" }}
+        title={data.job.title}
+        description={
+          <>
+            {data.job.company}
+            {data.job.location ? ` · ${data.job.location}` : ""}
+            {data.resumeVersion !== null && ` · resume v${data.resumeVersion}`}
+            {data.tailoredScore !== null && ` · score ${data.tailoredScore}`}
+          </>
+        }
+      />
 
-      <h1 className="mt-4 text-2xl font-semibold">{data.job.title}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {data.job.company}
-        {data.job.location ? ` · ${data.job.location}` : ""}
-        {data.resumeVersion !== null && ` · resume v${data.resumeVersion}`}
-        {data.tailoredScore !== null && ` · score ${data.tailoredScore}`}
-      </p>
-
-      {/* P6.1.4 — the user's own call. Deliberately unrestricted: they may move
-          it backwards (EC-P6-05) or mark it emailed with no attempt on file
-          (EC-P6-04), because they track reality, not just what this app did. */}
-      <section className="mt-6">
-        <label className="block text-sm font-medium">Status</label>
-        <select
-          value={data.status}
-          onChange={(e) => patch.mutate({ status: e.target.value })}
-          className="mt-1 rounded border px-3 py-2 text-sm"
+      <div className="mt-8 space-y-6">
+        {/* P6.1.4 — the user's own call. Deliberately unrestricted: they may move
+            it backwards (EC-P6-05) or mark it emailed with no attempt on file
+            (EC-P6-04), because they track reality, not just what this app did. */}
+        <Field
+          label="Status"
+          hint="Marking this replied, interviewing, rejected or closed is final — the pipeline will not move it again on its own."
         >
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s.replace("_", " ")}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Marking this replied, interviewing, rejected or closed is final — the
-          pipeline will not move it again on its own.
-        </p>
-      </section>
+          {(p) => (
+            <Select
+              {...p}
+              value={data.status}
+              onChange={(e) => patch.mutate({ status: e.target.value })}
+              className="sm:w-64"
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace("_", " ")}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
 
-      <section className="mt-6">
-        <label className="block text-sm font-medium">Notes</label>
-        <textarea
-          rows={3}
-          defaultValue={data.notes ?? ""}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={() => notes !== null && patch.mutate({ notes })}
-          placeholder="Recruiter name, referral, salary discussed…"
-          className="mt-1 w-full rounded border px-3 py-2 text-sm"
-        />
-      </section>
+        <Field label="Notes" hint="Saved when you click away from the box.">
+          {(p) => (
+            <Textarea
+              {...p}
+              rows={3}
+              className="min-h-24"
+              defaultValue={data.notes ?? ""}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={() => notes !== null && patch.mutate({ notes })}
+              placeholder="Recruiter name, referral, salary discussed…"
+            />
+          )}
+        </Field>
+      </div>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-medium text-muted-foreground">
-          Contacts ({data.contacts.length})
-        </h2>
+      <Section title={`Contacts (${data.contacts.length})`} className="mt-10">
         {data.contacts.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">None added.</p>
+          <p className="text-sm text-muted-foreground">None added.</p>
         ) : (
-          <ul className="mt-2 space-y-1 text-sm">
+          <ul className="space-y-2">
             {data.contacts.map((c) => (
-              <li key={c.id}>
-                {c.name ? `${c.name} · ` : ""}
-                <span className="font-mono text-xs">{c.email}</span>
-                <span className="ml-2 text-xs text-muted-foreground">{c.source}</span>
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm"
+              >
+                <span className="min-w-0">
+                  {c.name ? `${c.name} · ` : ""}
+                  <span className="font-mono text-xs">{c.email}</span>
+                </span>
+                <Badge variant="accent">{c.source}</Badge>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Section>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-medium text-muted-foreground">
-          Timeline ({data.attempts.length} attempt
-          {data.attempts.length === 1 ? "" : "s"})
-        </h2>
-
+      <Section
+        title={`Timeline (${data.attempts.length} attempt${data.attempts.length === 1 ? "" : "s"})`}
+        className="mt-10"
+      >
         {data.attempts.length === 0 && (
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {/* EC-P6-04: no attempts is not a missing row. If the status says
                 emailed, the user recorded that themselves. */}
             {data.status === "emailed"
@@ -181,41 +197,57 @@ export default function TrackerDetailPage({
           </p>
         )}
 
-        <ol className="mt-3 space-y-3">
+        {/*
+         * A rail with a marker per entry, rather than a stack of bordered
+         * boxes. These are events in time and the ordering carries meaning —
+         * "generated, then failed, then skipped" is the story the user came
+         * here for, and identical detached cards do not tell it.
+         */}
+        <ol className="relative space-y-4 border-l border-border pl-6">
           {data.attempts.map((a) => (
-            <li key={a.id} className="rounded border border-border bg-card p-3 text-sm">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className={ATTEMPT_TONE[a.status] ?? ""}>
-                  {a.status}
-                  {a.isFollowUp && " · follow-up"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(a.createdAt).toLocaleString()}
-                </span>
+            <li key={a.id} className="relative">
+              <span
+                aria-hidden="true"
+                className="absolute -left-[1.8125rem] top-1.5 size-2.5 rounded-full border-2 border-background bg-border-strong"
+              />
+              <div className="rounded-lg border border-border bg-card p-3 text-sm shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge variant={ATTEMPT_TONE[a.status] ?? "secondary"}>
+                    {a.status}
+                    {a.isFollowUp && " · follow-up"}
+                  </Badge>
+                  <time className="text-xs text-muted-foreground">
+                    {new Date(a.createdAt).toLocaleString()}
+                  </time>
+                </div>
+
+                <p className="mt-2 font-medium">{a.subject}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {a.recipient ?? "no contact"} · {a.wordCount} words ·{" "}
+                  {a.generationSource} · {a.provider}
+                </p>
+
+                {a.errorMessage && (
+                  <p className="mt-2 text-xs font-medium text-danger">
+                    {a.errorMessage}
+                  </p>
+                )}
+                {/* EC-P5-59: the one direction the audit trail can under-report. */}
+                {a.status === "failed" && a.providerAttemptedAt && (
+                  <p className="mt-2 text-xs font-medium text-warning">
+                    Reached the provider before failing — a draft may exist.
+                  </p>
+                )}
+                {a.providerMessageId && (
+                  <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
+                    {a.providerMessageId}
+                  </p>
+                )}
               </div>
-              <p className="mt-1">{a.subject}</p>
-              <p className="text-xs text-muted-foreground">
-                {a.recipient ?? "no contact"} · {a.wordCount} words ·{" "}
-                {a.generationSource} · {a.provider}
-              </p>
-              {a.errorMessage && (
-                <p className="mt-1 text-xs text-red-700">{a.errorMessage}</p>
-              )}
-              {/* EC-P5-59: the one direction the audit trail can under-report. */}
-              {a.status === "failed" && a.providerAttemptedAt && (
-                <p className="mt-1 text-xs text-amber-700">
-                  Reached the provider before failing — a draft may exist.
-                </p>
-              )}
-              {a.providerMessageId && (
-                <p className="mt-1 font-mono text-xs text-muted-foreground">
-                  {a.providerMessageId}
-                </p>
-              )}
             </li>
           ))}
         </ol>
-      </section>
-    </main>
+      </Section>
+    </Page>
   );
 }

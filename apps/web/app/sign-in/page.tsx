@@ -4,6 +4,12 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+
 function SignInForm() {
   const router = useRouter();
   const next = useSearchParams().get("next") ?? "/resumes";
@@ -33,35 +39,60 @@ function SignInForm() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">Sign in</h1>
-      <form onSubmit={submit} className="mt-6 space-y-4">
-        <label className="block">
-          <span className="text-sm">Email</span>
-          <input
-            type="email" required value={email} autoComplete="email"
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">Password</span>
-          <input
-            type="password" required value={password} autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </label>
+      <div className="space-y-1.5 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
+        <p className="text-sm text-muted-foreground">
+          Pick up where you left off.
+        </p>
+      </div>
+
+      <form onSubmit={submit} className="mt-8 space-y-4">
+        <Field label="Email" required>
+          {(p) => (
+            <Input
+              {...p}
+              type="email"
+              required
+              value={email}
+              autoComplete="email"
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
+        </Field>
+
+        <Field label="Password" required>
+          {(p) => (
+            <Input
+              {...p}
+              type="password"
+              required
+              value={password}
+              autoComplete="current-password"
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          )}
+        </Field>
+
         {/* role=alert so the failure is announced, not just coloured (EC-P7-07) */}
-        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        <button
-          type="submit" disabled={busy}
-          className="w-full rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-        >
+        {error && (
+          <Alert role="alert" tone="danger">
+            {error}
+          </Alert>
+        )}
+
+        <Button type="submit" className="w-full" loading={busy}>
           {busy ? "Signing in…" : "Sign in"}
-        </button>
+        </Button>
       </form>
-      <p className="mt-6 text-sm">
-        No account? <Link href="/sign-up" className="underline">Sign up</Link>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        No account?{" "}
+        <Link
+          href="/sign-up"
+          className="font-medium text-link underline decoration-link/40 underline-offset-4 hover:decoration-link"
+        >
+          Sign up
+        </Link>
       </p>
     </>
   );
@@ -75,10 +106,18 @@ function SignInForm() {
  */
 export default function SignInPage() {
   return (
-    <main className="mx-auto max-w-sm px-6 py-16">
-      <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+    <div className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
+      <Suspense
+        fallback={
+          <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading">
+            <Skeleton className="mx-auto h-8 w-32" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        }
+      >
         <SignInForm />
       </Suspense>
-    </main>
+    </div>
   );
 }

@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { MailCheck } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -64,50 +70,92 @@ export default function SignUpPage() {
 
   if (done) {
     return (
-      <main className="mx-auto max-w-sm px-6 py-16">
-        <h1 className="text-2xl font-semibold">Check your email</h1>
-        <p className="mt-4 text-sm text-neutral-600">
-          We sent a confirmation link. You need to click it before you can sign in.
+      <div className="mx-auto w-full max-w-sm px-4 py-16 text-center sm:px-6">
+        <span
+          aria-hidden="true"
+          className="mx-auto grid size-12 place-items-center rounded-full bg-success-soft text-success"
+        >
+          <MailCheck className="size-6" />
+        </span>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight">
+          Check your email
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          We sent a confirmation link. You need to click it before you can sign
+          in.
         </p>
         <p className="mt-6 text-sm">
-          <Link href="/sign-in" className="underline">Back to sign in</Link>
+          <Link
+            href="/sign-in"
+            className="font-medium text-link underline decoration-link/40 underline-offset-4 hover:decoration-link"
+          >
+            Back to sign in
+          </Link>
         </p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-sm px-6 py-16">
-      <h1 className="text-2xl font-semibold">Create an account</h1>
-      <form onSubmit={submit} className="mt-6 space-y-4">
-        <label className="block">
-          <span className="text-sm">Email</span>
-          <input
-            type="email" required value={email} autoComplete="email"
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">Password</span>
-          <input
-            type="password" required minLength={8} value={password}
-            autoComplete="new-password"
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </label>
-        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        <button
-          type="submit" disabled={busy}
-          className="w-full rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-        >
+    <div className="mx-auto w-full max-w-sm px-4 py-16 sm:px-6">
+      <div className="space-y-1.5 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Create an account
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Harvesting, scoring, and outreach all need one. Tailoring alone does
+          not.
+        </p>
+      </div>
+
+      <form onSubmit={submit} className="mt-8 space-y-4">
+        <Field label="Email" required>
+          {(p) => (
+            <Input
+              {...p}
+              type="email"
+              required
+              value={email}
+              autoComplete="email"
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          )}
+        </Field>
+
+        <Field label="Password" required hint="At least 8 characters.">
+          {(p) => (
+            <Input
+              {...p}
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              autoComplete="new-password"
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          )}
+        </Field>
+
+        {error && (
+          <Alert role="alert" tone="danger">
+            {error}
+          </Alert>
+        )}
+
+        <Button type="submit" className="w-full" loading={busy}>
           {busy ? "Creating…" : "Create account"}
-        </button>
+        </Button>
       </form>
-      <p className="mt-6 text-sm">
-        Already have one? <Link href="/sign-in" className="underline">Sign in</Link>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        Already have one?{" "}
+        <Link
+          href="/sign-in"
+          className="font-medium text-link underline decoration-link/40 underline-offset-4 hover:decoration-link"
+        >
+          Sign in
+        </Link>
       </p>
-    </main>
+    </div>
   );
 }

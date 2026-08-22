@@ -2,6 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, Loader2, RotateCw, Search as SearchIcon } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Page, PageHeader } from "@/components/ui/page";
+import { cn } from "@/lib/utils";
 
 const BOARDS = ["naukri", "remoteok", "wellfound"] as const;
 
@@ -111,72 +120,125 @@ export default function SearchPage() {
   const canRetry = run !== null && !running && failedBoards.length > 0;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Search jobs</h1>
-      <p className="mt-1 text-sm text-neutral-600">
-        Runs in the background across every board you pick. One board failing
-        never fails the others.
-      </p>
+    <Page width="content">
+      <PageHeader
+        title="Search jobs"
+        description="Runs in the background across every board you pick. One board failing never fails the others."
+      />
 
-      <form onSubmit={start} className="mt-6 space-y-4">
+      <form onSubmit={start} className="mt-8 space-y-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="text-sm">Role</span>
-            <input value={role} onChange={(e) => setRole(e.target.value)} required
-              className="mt-1 w-full rounded border px-3 py-2" />
-          </label>
-          <label className="block">
-            <span className="text-sm">Location <span className="text-neutral-400">(optional)</span></span>
-            <input value={location} onChange={(e) => setLocation(e.target.value)}
-              className="mt-1 w-full rounded border px-3 py-2" />
-          </label>
+          <Field label="Role" required>
+            {(p) => (
+              <Input
+                {...p}
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                required
+                placeholder="AI Engineer"
+              />
+            )}
+          </Field>
+          <Field label="Location" hint="Optional — leave blank to search everywhere.">
+            {(p) => (
+              <Input
+                {...p}
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Bengaluru"
+              />
+            )}
+          </Field>
         </div>
 
         <fieldset>
-          <legend className="text-sm">Boards</legend>
-          <div className="mt-2 flex gap-4">
-            {BOARDS.map((b) => (
-              <label key={b} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={boards.includes(b)}
-                  onChange={(e) => setBoards((prev) =>
-                    e.target.checked ? [...prev, b] : prev.filter((x) => x !== b))} />
-                {b}
-              </label>
-            ))}
+          <legend className="text-sm font-medium">Boards</legend>
+          {/*
+           * Each board is a full card rather than a bare checkbox with a word
+           * next to it. The original was three ~13px labels in a row: the tap
+           * target was the checkbox alone at 16px, and unticking a board on a
+           * phone was genuinely fiddly on the screen where the choice matters
+           * most.
+           */}
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {BOARDS.map((b) => {
+              const checked = boards.includes(b);
+              return (
+                <label
+                  key={b}
+                  className={cn(
+                    "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors duration-150",
+                    checked
+                      ? "border-primary bg-primary-soft font-medium text-foreground"
+                      : "border-border-strong bg-card text-muted-foreground hover:border-border-strong hover:text-foreground",
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onChange={(e) =>
+                      setBoards((prev) =>
+                        e.target.checked ? [...prev, b] : prev.filter((x) => x !== b),
+                      )
+                    }
+                  />
+                  {b}
+                </label>
+              );
+            })}
           </div>
+          {boards.length === 0 && (
+            <p className="mt-2 text-xs font-medium text-warning">
+              Pick at least one board to search.
+            </p>
+          )}
         </fieldset>
 
-        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        {error && (
+          <Alert role="alert" tone="danger" title="Could not start the search">
+            {error}
+          </Alert>
+        )}
 
-        <button type="submit" disabled={running || boards.length === 0}
-          className="rounded bg-black px-4 py-2 text-white disabled:opacity-50">
+        <Button type="submit" size="lg" loading={running} disabled={boards.length === 0}>
+          {!running && <SearchIcon className="size-4" aria-hidden="true" />}
           {running ? "Searching…" : "Search"}
-        </button>
+        </Button>
       </form>
 
       {run && (
-        <section className="mt-10">
-          <h2 className="text-lg font-medium">
-            Progress <span className="text-sm font-normal text-neutral-500">({run.status})</span>
-          </h2>
-          <ul className="mt-3 divide-y rounded border">
+        <section className="mt-10" aria-labelledby="progress">
+          <div className="flex items-center gap-2">
+            <h2 id="progress" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Progress
+            </h2>
+            <span className="text-xs text-muted-foreground">({run.status})</span>
+            {running && (
+              <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+            )}
+          </div>
+
+          <ul className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
             {boards.map((b) => {
               const r = run.boardResults?.[b];
               return (
-                <li key={b} className="flex items-center justify-between px-4 py-3 text-sm">
+                <li key={b} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                   <span className="font-medium">{b}</span>
                   {!r ? (
-                    <span className="text-neutral-400">waiting…</span>
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      waiting…
+                    </span>
                   ) : r.status === "failed" ? (
                     // EC-P2-38: a globally-open circuit is not this user's
                     // fault. Say "temporarily unavailable", not "failed".
-                    <span className="text-amber-700">
+                    <span className="text-right font-medium text-warning">
                       {r.reason === "circuit_open"
                         ? "temporarily unavailable"
                         : `unavailable — ${r.reason ?? "unknown"}`}
                     </span>
                   ) : (
-                    <span className="text-green-700">
+                    <span className="flex items-center gap-1.5 font-medium text-success">
+                      <CheckCircle2 className="size-3.5" aria-hidden="true" />
                       {r.count} job{r.count === 1 ? "" : "s"}
                       {r.status === "partial" && " (partial)"}
                     </span>
@@ -186,37 +248,36 @@ export default function SearchPage() {
             })}
           </ul>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {!running && (
-              <button onClick={() => router.push(`/jobs?runId=${runId}`)}
-                className="rounded border px-4 py-2 text-sm">
+              <Button onClick={() => router.push(`/jobs?runId=${runId}`)}>
                 View {run.jobCount ?? 0} jobs
-              </button>
+              </Button>
             )}
 
             {/* EC-P7-13: the label names the subset, because "Retry" next to a
                 list of results that mostly succeeded reads as "run it all
                 again" — and a user who believes that will not press it. */}
             {canRetry && (
-              <button onClick={retryFailed} disabled={retrying}
-                className="rounded border px-4 py-2 text-sm disabled:opacity-50">
+              <Button variant="outline" onClick={retryFailed} loading={retrying}>
+                {!retrying && <RotateCw className="size-4" aria-hidden="true" />}
                 {retrying
                   ? "Retrying…"
                   : `Retry ${failedBoards.length} failed board${failedBoards.length === 1 ? "" : "s"}`}
-              </button>
+              </Button>
             )}
 
             {running && (
               /* EC-P7-12 — say what is happening instead of showing a disabled
                  retry control. A greyed-out button with no explanation reads as
                  broken; the current state is the more useful thing to show. */
-              <span className="text-sm text-neutral-500">
+              <p className="text-sm text-muted-foreground">
                 Still searching — retry becomes available when this finishes.
-              </span>
+              </p>
             )}
           </div>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

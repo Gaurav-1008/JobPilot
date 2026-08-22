@@ -1,8 +1,10 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import { clearRun } from "@/lib/run-view-store";
 
 /**
@@ -30,8 +32,14 @@ export function SignOutButton() {
   }
 
   return (
-    <button onClick={signOut} className="text-sm underline">
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={signOut}
+      className="w-full justify-start md:w-auto md:justify-center"
+    >
+      <LogOut className="size-4" aria-hidden="true" />
       Sign out
-    </button>
+    </Button>
   );
 }

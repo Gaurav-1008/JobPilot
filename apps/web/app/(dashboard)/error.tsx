@@ -27,6 +27,8 @@
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
 export default function DashboardError({
   error,
   reset,
@@ -43,24 +45,24 @@ export default function DashboardError({
   }, [error]);
 
   return (
-    <main className="mx-auto max-w-lg px-6 py-20 text-center">
-      <span className="mx-auto grid size-12 place-items-center rounded-full bg-[color-mix(in_srgb,var(--danger)_15%,transparent)] text-danger">
+    <div className="mx-auto max-w-lg px-4 py-20 text-center sm:px-6">
+      <span
+        aria-hidden="true"
+        className="mx-auto grid size-12 place-items-center rounded-full bg-danger-soft text-danger"
+      >
         <AlertTriangle className="size-6" />
       </span>
 
-      <h1 className="mt-4 text-lg font-semibold">This screen hit an error</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
+      <h1 className="mt-4 text-lg font-semibold tracking-tight">
+        This screen hit an error
+      </h1>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
         Your data is safe — nothing was deleted, and anything already saved is
         still saved.
       </p>
 
       <div className="mt-6 flex flex-col items-center gap-3">
-        <button
-          onClick={() => window.location.reload()}
-          className="rounded bg-black px-4 py-2 text-sm text-white"
-        >
-          Reload this page
-        </button>
+        <Button onClick={() => window.location.reload()}>Reload this page</Button>
 
         {/*
          * Secondary, and labelled honestly. If the user had just started a
@@ -68,13 +70,10 @@ export default function DashboardError({
          * repeat it — so the label says what the button does rather than
          * promising it is safe.
          */}
-        <button
-          onClick={reset}
-          className="text-sm text-muted-foreground underline"
-        >
+        <Button variant="link" size="sm" onClick={reset} className="h-auto whitespace-normal">
           Or retry without reloading — avoid this if you had just started
           something
-        </button>
+        </Button>
       </div>
 
       {error.digest && (
@@ -82,6 +81,6 @@ export default function DashboardError({
           Reference: {error.digest}
         </p>
       )}
-    </main>
+    </div>
   );
 }

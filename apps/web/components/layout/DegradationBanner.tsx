@@ -19,6 +19,7 @@
  * open should not be polling from all of them overnight.
  */
 
+import { AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 interface HealthResponse {
@@ -55,9 +56,12 @@ export function DegradationBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900"
+      className="border-t border-warning-border bg-warning-soft text-warning"
     >
-      {data.notice}
+      <p className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-4 py-2 text-center text-sm sm:px-6">
+        <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+        {data.notice}
+      </p>
     </div>
   );
 }
