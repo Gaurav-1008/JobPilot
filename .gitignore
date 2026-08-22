@@ -52,3 +52,25 @@ Thumbs.db
 
 # Python venv (P0.4)
 .venv/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Local object storage — REAL USER FILES.
+#
+# STORAGE_DRIVER=fs writes uploaded resumes and generated PDFs here, under
+# .storage/resume/<userId>/<uuid>.pdf. Those are somebody's actual resume:
+# name, address, phone number, employment history.
+#
+# It was not ignored, and a `git add -A` committed one. Anything the
+# application writes at runtime belongs outside version control by default —
+# the question is never "is this file sensitive" but "can the app create
+# files here", and here it can.
+.storage/
+**/.storage/
+
+# Scratch scripts. One-off probes written during debugging get swept up by
+# `git add -A` and carry whatever query they were testing — which is how a
+# personal email address ended up in a commit.
+*-tmp.mjs
+*-tmp.mts
+*-tmp.js
+*-tmp.ts
