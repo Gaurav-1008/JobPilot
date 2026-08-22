@@ -9,6 +9,7 @@
 
 import type { Prisma } from "@prisma/client";
 
+import { scopeToRun } from "../run-filter";
 import { prisma } from "../client";
 import { advanceApplicationStatus } from "./tracker";
 
@@ -102,7 +103,11 @@ export async function getHarvestRun(id: string, userId: string) {
     },
   });
   if (!run) return null;
-  const jobCount = await prisma.job.count({ where: { userId, harvestRunId: id } });
+  // Jobs this run SURFACED, not just the ones it discovered first — otherwise
+  // re-running a search reports "View 0 jobs" while the board holds hundreds.
+  const jobCount = await prisma.job.count({
+    where: { userId, ...scopeToRun(id) },
+  });
   return { ...run, jobCount };
 }
 
@@ -117,7 +122,7 @@ export async function getHarvestRun(id: string, userId: string) {
  */
 export async function listJobs(userId: string, runId?: string | null) {
   const jobs = await prisma.job.findMany({
-    where: { userId, ...(runId ? { harvestRunId: runId } : {}) },
+    where: { userId, ...scopeToRun(runId) },
     take: 200,
     select: {
       id: true, source: true, title: true, company: true, location: true,
@@ -272,7 +277,7 @@ export async function getJobWithDescription(id: string, userId: string) {
 /** EC-P4-22 — scoring needs hydrated JDs; count before queueing a run. */
 export async function countHydratedJobs(userId: string, runId?: string | null) {
   return prisma.job.count({
-    where: { userId, hydrationStatus: "hydrated", ...(runId ? { harvestRunId: runId } : {}) },
+    where: { userId, hydrationStatus: "hydrated", ...scopeToRun(runId) },
   });
 }
 

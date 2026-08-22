@@ -17,6 +17,7 @@ import type Redis from "ioredis";
 
 import { scoreTier0, DEFAULT_TIER0_FLOOR } from "../../../apps/web/lib/scoring/tier0";
 import { consumeLlmQuota } from "../../../apps/web/lib/llm/quota";
+import { scopeToRun } from "../../../apps/web/lib/db/run-filter";
 import { userStillExists } from "./harvest";
 import {
   buildScoringPrompt,
@@ -90,11 +91,17 @@ export async function handleScoreBatch(
   });
   if (!resume) return;
 
+  // Jobs this run SURFACED, not only the ones it discovered first.
+  //
+  // `harvestRunId` alone means "first seen by this run" (EC-P2-19), so scoring
+  // a re-run would silently cover only the postings that happened to be new —
+  // and unlike the empty board, that failure looks entirely plausible. The user
+  // gets a scored list that is quietly missing most of their search.
   const jobs = await deps.prisma.job.findMany({
     where: {
       userId,
       hydrationStatus: "hydrated",
-      ...(harvestRunId ? { harvestRunId } : {}),
+      ...scopeToRun(harvestRunId),
     },
     include: { jobDescription: true },
   });
