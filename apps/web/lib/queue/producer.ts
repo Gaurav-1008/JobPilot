@@ -210,11 +210,60 @@ export async function enqueueScoreBatch(data: ScoreBatchPayload): Promise<void> 
  * check must not have side effects, and it must not be able to become the load
  * it is measuring (EC-P7-11).
  */
-export async function pingQueue(timeoutMs = 1_000): Promise<boolean> {
+export async function pingQueue(timeoutMs = 2_000): Promise<boolean> {
+  const client = connection();
+  const deadline = Date.now() + timeoutMs;
+
   try {
+    /**
+     * WAIT FOR THE SOCKET BEFORE JUDGING IT. "Connecting" is not "down".
+     *
+     * `enableOfflineQueue: false` above is what makes an ENQUEUE fail fast
+     * instead of hanging (EC-P7-09) — the whole point of that setting. It also
+     * makes any command issued while the socket is still connecting reject
+     * instantly, and this probe is a command.
+     *
+     * So on a cold start the sequence was: create client → probe immediately →
+     * rejected because not yet connected → report the queue as unreachable.
+     * Redis was fine every time. The banner announced "Job searching is paused"
+     * for the first seconds of every new instance, which on a serverless host
+     * means on every cold start.
+     *
+     * A health check that fails when the dependency is healthy is worse than no
+     * health check: it is the one signal that has to be trusted before anyone
+     * acts on it, and this taught users to ignore it (the EC-P7-21 lesson,
+     * arrived at from the other direction).
+     *
+     * Only a real error or a real timeout now counts as down.
+     */
+    if (client.status !== "ready") {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("connect timeout"));
+        }, Math.max(0, deadline - Date.now()));
+
+        // Listeners are removed on every exit path. This runs on a cache miss
+        // and would otherwise leak a pair per probe, which for a long-lived
+        // server is a slow MaxListenersExceededWarning rather than a crash —
+        // the kind of leak nobody notices until it is large.
+        const onReady = () => { cleanup(); resolve(); };
+        const onError = (err: Error) => { cleanup(); reject(err); };
+        function cleanup() {
+          clearTimeout(timer);
+          client.off("ready", onReady);
+          client.off("error", onError);
+        }
+        client.once("ready", onReady);
+        client.once("error", onError);
+      });
+    }
+
     await Promise.race([
-      connection().ping(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), timeoutMs)),
+      client.ping(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("ping timeout")), Math.max(0, deadline - Date.now())),
+      ),
     ]);
     return true;
   } catch {

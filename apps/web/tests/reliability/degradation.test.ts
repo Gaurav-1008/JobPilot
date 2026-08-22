@@ -99,10 +99,63 @@ vi.mock("bullmq", () => ({
   },
 }));
 
+/**
+ * One configurable ioredis double, driven by a hoisted knob — the same pattern
+ * `addImpl` uses for bullmq above.
+ *
+ * Deliberately NOT `vi.doMock`/`vi.doUnmock` per test: `doUnmock` does not
+ * restore a module-level `vi.mock` factory, so a per-test mock leaks into the
+ * next test and the failure looks like a bug in the code under test rather than
+ * in the harness. It cost one confusing red run to learn.
+ *
+ * `status` and the listener methods are modelled because pingQueue now waits
+ * for `ready` before judging a connection — a double without them is not a
+ * Redis client, it is a shape that happens to have `ping`.
+ */
+const redisImpl = vi.hoisted(() => ({
+  /** "connecting" then ready after `readyAfterMs`, or stuck if null. */
+  readyAfterMs: null as number | null,
+  ping: () => Promise.reject(new Error("ECONNREFUSED")) as Promise<unknown>,
+}));
+
 vi.mock("ioredis", () => ({
   default: class {
+    status = "connecting";
+    private listeners: Record<string, Array<(...a: unknown[]) => void>> = {};
+    constructor() {
+      if (redisImpl.readyAfterMs !== null) {
+        setTimeout(() => {
+          this.status = "ready";
+          (this.listeners.ready ?? []).forEach((fn) => fn());
+        }, redisImpl.readyAfterMs);
+      }
+    }
     on() { return this; }
-    ping() { return Promise.reject(new Error("ECONNREFUSED")); }
+    once(ev: string, fn: (...a: unknown[]) => void) {
+      (this.listeners[ev] ??= []).push(fn);
+      return this;
+    }
+    off(ev: string, fn: (...a: unknown[]) => void) {
+      this.listeners[ev] = (this.listeners[ev] ?? []).filter((f) => f !== fn);
+      return this;
+    }
+    ping() {
+      /**
+       * THE BEHAVIOUR THAT MAKES THIS TEST MEAN ANYTHING.
+       *
+       * With `enableOfflineQueue: false`, real ioredis REJECTS a command issued
+       * before the socket is ready — it does not queue it. A double whose
+       * `ping` resolves regardless models a client that cannot exhibit the bug,
+       * and the test then passes with or without the fix. It did, until this
+       * line existed: the mutation check caught the test, not the code.
+       */
+      if (this.status !== "ready") {
+        return Promise.reject(
+          new Error("Stream isn't writeable and enableOfflineQueue options is false"),
+        );
+      }
+      return redisImpl.ping();
+    }
   },
 }));
 
@@ -111,6 +164,10 @@ describe("EC-P7-09 — enqueueing against a down Redis fails fast", () => {
     vi.resetModules();
     (globalThis as Record<string, unknown>).__jobpilotQueue = undefined;
     (globalThis as Record<string, unknown>).__jobpilotRedis = undefined;
+    // Default: a socket that never connects, which is the "Redis down" case
+    // most of this suite is about.
+    redisImpl.readyAfterMs = null;
+    redisImpl.ping = () => Promise.reject(new Error("ECONNREFUSED"));
   });
 
   afterEach(() => {
@@ -146,6 +203,31 @@ describe("EC-P7-09 — enqueueing against a down Redis fails fast", () => {
     await expect(
       enqueueHydrate([{ jobId: "j1", userId: "u1" }]),
     ).rejects.toBeInstanceOf(QueueUnavailableError);
+  });
+
+  it("does not report DOWN while the socket is still connecting", async () => {
+    /**
+     * REGRESSION: the banner cried wolf on every cold start.
+     *
+     * `enableOfflineQueue: false` is what makes an enqueue fail fast rather
+     * than hang (the whole point of EC-P7-09 above). It also makes ANY command
+     * issued while the socket is connecting reject instantly — and the health
+     * probe is a command.
+     *
+     * So a fresh instance probed before the connection completed, got an
+     * immediate rejection, and announced "Job searching is paused — the queue
+     * is unreachable" against a perfectly healthy Redis. On a serverless host
+     * that is every cold start.
+     *
+     * A health check that fails while the dependency is fine is worse than
+     * none: it is the signal that has to be trusted before anyone acts on it,
+     * and a false one teaches people to ignore it.
+     */
+    redisImpl.readyAfterMs = 50;              // connects shortly after the probe
+    redisImpl.ping = () => Promise.resolve("PONG");
+
+    const { pingQueue } = await import("@/lib/queue/producer");
+    await expect(pingQueue(2_000)).resolves.toBe(true);
   });
 
   it("reports the queue as down without throwing, for the banner", async () => {
