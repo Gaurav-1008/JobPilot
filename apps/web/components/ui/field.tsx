@@ -52,17 +52,17 @@ export function Field({
         )}
       </label>
 
-      {hint && (
-        <p id={hintId} className="text-xs leading-relaxed text-muted-foreground">
-          {hint}
-        </p>
-      )}
-
       {children({
         id,
         "aria-describedby": describedBy,
         "aria-invalid": error ? true : undefined,
       })}
+
+      {hint && (
+        <p id={hintId} className="text-xs leading-relaxed text-muted-foreground">
+          {hint}
+        </p>
+      )}
 
       {/* role="alert" so a validation failure is announced when it appears,
           not only when the user next tabs onto the field. */}
