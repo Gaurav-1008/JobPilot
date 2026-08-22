@@ -1,14 +1,46 @@
+# Build context excludes, shared by ③ and ④.
+
 .git
 .venv
 node_modules
 **/node_modules
+
+# Build output. Never wanted in an image, and .next is large enough to matter.
 .next
-apps/web
+**/.next
+**/dist
+.pytest_cache
+**/__pycache__
+
+# ─────────────────────────────────────────────────────────────────────────
+# `apps/web` is NOT excluded wholesale, and that is deliberate.
+#
+# It was, and it broke ③'s build. The orchestrator imports from apps/web by
+# design (ADR-003 keeps the queue types, the Tier-0 scorer, the LLM client and
+# quota, and the run filter in one place rather than duplicating them across
+# two languages' worth of services). Excluding the directory made those COPY
+# lines silently resolve to nothing and the image fail at `prisma generate`.
+#
+# ④ does not copy from apps/web at all, so the only cost to its build is a
+# slightly larger context — source text, since the heavy directories are
+# excluded above.
+# ─────────────────────────────────────────────────────────────────────────
+apps/web/.storage
+apps/web/public
+apps/web/tests
+apps/web/docs
+
+# Docs and local notes: never part of a runtime image.
 docs
 *.md
+!README.md
+
+# Secrets. `.env.example` is the documented template and is safe to ship.
 .env
 .env.*
 !.env.example
+
+# Legacy fixtures and credential files from the source projects.
 outreach_log.csv
 token.json
 credentials.json

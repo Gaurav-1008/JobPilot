@@ -33,7 +33,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 
-import { environment, logSendPolicy } from "@/lib/outreach/send-policy";
+import { environment, logSendPolicy, unrecognisedEnvironment } from "@/lib/outreach/send-policy";
 import { log } from "@/lib/obs/logger";
 
 export class ConfigurationError extends Error {
@@ -144,6 +144,46 @@ export function validateConfig(): ValidationReport {
 
   const errors: string[] = [];
   const warnings: string[] = [];
+
+  /**
+   * A misspelled JOBPILOT_ENV is a boot failure, not a silent downgrade.
+   *
+   * `environment()` resolves anything unknown to `local`, which forces dry-run
+   * — safe, and completely silent. A deploy that meant `production` and typed
+   * `prod` would come up healthy, pass every check, and never send an email,
+   * and the first symptom is somebody asking weeks later why nothing arrived.
+   *
+   * Checked first because it changes what the rest of this function requires:
+   * with the value unresolvable, "which variables are mandatory" has no
+   * trustworthy answer.
+   */
+  const typo = unrecognisedEnvironment();
+  if (typo) {
+    errors.push(
+      `JOBPILOT_ENV is "${typo}", which is not one of production, staging, or local. ` +
+        "Sending is disabled while it is unrecognised — set it exactly, or leave it unset for local.",
+    );
+  }
+
+  /**
+   * An "overlap" where both keys are the same value is an in-place swap
+   * (EC-P7-27), and it is invisible: three variables set, version bumped, V1
+   * present, everything shaped correctly. The only symptom is that every
+   * stored credential stops decrypting — after the old key is gone.
+   *
+   * A boot failure is the right response because at boot the old key may still
+   * exist somewhere recoverable. Discovered at first send, it does not.
+   */
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!/^ENCRYPTION_KEY_V\d+$/.test(name)) continue;
+    if (value?.trim() && value.trim() === process.env.ENCRYPTION_KEY?.trim()) {
+      errors.push(
+        `${name} is identical to ENCRYPTION_KEY — that is an in-place swap, not a rotation overlap. ` +
+          "Every credential written under the previous key becomes unreadable. " +
+          "See docs/runbooks/encryption-key-rotation.md.",
+      );
+    }
+  }
 
   for (const req of required) {
     const value = process.env[req.name];

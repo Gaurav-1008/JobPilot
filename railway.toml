@@ -1,0 +1,66 @@
+# Railway deployment (P7.4.1, architecture.md §17).
+#
+# Railway builds ONE service per config, so ③ and ④ are separate Railway
+# services in the same project, each pointed at its own Dockerfile. This file
+# is ③; ④'s equivalent block is below, commented, because Railway reads a
+# single [build] per service — copy it into ④'s service settings or use a
+# second railway.toml via the service's config-path setting.
+#
+# ① (Next.js) goes to Vercel, not here — see vercel.json.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/orchestrator/Dockerfile"
+
+[deploy]
+# ③ is the single writer and nothing else reaps stale runs. The reaper lives
+# INSIDE this process (services/orchestrator/index.ts documents that as a known
+# limitation), so a crashed orchestrator means runs sit `queued` forever. It
+# needs a supervisor that restarts it — this is that supervisor.
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10
+
+# ONE replica, deliberately.
+#
+# §10.1 sets scoring concurrency to 1 per user, and the harvest rate limiter is
+# global across replicas via Redis — so a second replica does not double
+# throughput against the boards, it just doubles the connection count against a
+# 60-connection Postgres. Scale ④ instead: that is where the slow work is.
+numReplicas = 1
+
+# No healthcheckPath: ③ takes no HTTP ingress (§4). The Dockerfile's
+# HEALTHCHECK probes Redis directly, which is the honest liveness signal for a
+# queue consumer.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Required variables. Set these in Railway's dashboard, not here — this file
+# is committed and they are secrets.
+#
+#   DIRECT_URL              Supabase :5432 (session mode). NOT the pooled
+#                           :6543 — ③ is a persistent worker and transaction
+#                           pooling is built for the opposite shape.
+#   REDIS_URL               Railway Redis add-on, private networking
+#   WORKER_SERVICE_URL      ④'s private URL (http://python.railway.internal:8000)
+#   WORKER_SERVICE_TOKEN    shared secret with ④; must match exactly
+#   GROQ_API_KEY            scoring calls originate here
+#   SCORING_MODEL           check against the provider's live model list
+#   JOBPILOT_ENV=production ← WITHOUT THIS, NOTHING SENDS. The image defaults
+#                           to `local`, which forces dry-run. That is the safe
+#                           default and it is also the one people forget.
+#   ORCHESTRATOR_CONCURRENCY   defaults to 4; also sizes the Prisma pool
+# ─────────────────────────────────────────────────────────────────────────
+
+# ── ④ Python worker — copy into its own Railway service ──────────────────
+# [build]
+# builder = "DOCKERFILE"
+# dockerfilePath = "services/python/Dockerfile"
+#
+# [deploy]
+# restartPolicyType = "ALWAYS"
+# numReplicas = 1
+# healthcheckPath = "/health"        # ④ DOES take ingress, from ③ and ①
+# healthcheckTimeout = 30
+#
+# ④ needs ~1GB: Chromium is ~400MB resident and EC-P2-13 notes Playwright
+# leaks contexts under concurrency. Raising uvicorn --workers without raising
+# memory is how you get an OOM that reads as a board outage.

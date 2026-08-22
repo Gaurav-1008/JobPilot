@@ -193,8 +193,11 @@ describe("the policy module reads the environment, not the database", () => {
     expect(source).not.toMatch(/db\/repository|db\/client|prisma|scoped\(/);
     expect(source).not.toMatch(/\bprofile\b|findUnique|findFirst/);
 
-    // The only inputs are environment variables.
-    const reads = source.match(/process\.env\.\w+/g) ?? [];
+    // The only input is JOBPILOT_ENV. Deduplicated deliberately: the module
+    // reads it from two functions — `environment()` for the runtime fallback
+    // and `unrecognisedEnvironment()` for the boot-time typo check — and the
+    // property under test is WHICH variables it reads, not how many times.
+    const reads = [...new Set(source.match(/process\.env\.\w+/g) ?? [])];
     expect(reads).toEqual(["process.env.JOBPILOT_ENV"]);
   });
 });

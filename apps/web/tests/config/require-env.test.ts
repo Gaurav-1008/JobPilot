@@ -139,3 +139,55 @@ describe("optional integrations warn, never fail", () => {
     expect(report.warnings.join(" ")).toMatch(/FIRECRAWL_API_KEY/);
   });
 });
+
+describe("a misspelled JOBPILOT_ENV refuses to boot (P7.4.4)", () => {
+  /**
+   * Resolving an unknown value to `local` is SAFE — nothing sends — and
+   * completely silent. A deploy that meant production and typed "prod" comes up
+   * healthy, passes every check, and never sends an email; the first symptom is
+   * somebody asking weeks later why nothing arrived.
+   *
+   * So the runtime keeps failing closed, and the BOOT gets loud.
+   */
+  it("refuses on a near-miss like 'prod'", () => {
+    productionEnv();
+    process.env.JOBPILOT_ENV = "prod";
+
+    const report = validateConfig();
+    expect(report.ok).toBe(false);
+    expect(report.errors.join(" ")).toMatch(/not one of production, staging, or local/);
+    expect(() => assertConfig()).toThrow(ConfigurationError);
+  });
+
+  it("refuses on a case difference", () => {
+    productionEnv();
+    process.env.JOBPILOT_ENV = "Production";
+    expect(validateConfig().ok).toBe(false);
+  });
+
+  it("accepts the three known values", () => {
+    for (const env of ["production", "staging", "local"]) {
+      productionEnv();
+      process.env.JOBPILOT_ENV = env;
+      const report = validateConfig();
+      expect(report.errors.filter((e) => e.includes("JOBPILOT_ENV"))).toEqual([]);
+    }
+  });
+
+  it("treats UNSET as legitimate, not as a typo", () => {
+    // A developer running `npm run dev` meant this. Only a set-but-wrong value
+    // indicates an intent that missed.
+    productionEnv();
+    delete process.env.JOBPILOT_ENV;
+    expect(validateConfig().errors.filter((e) => e.includes("JOBPILOT_ENV"))).toEqual([]);
+  });
+
+  it("still forces dry-run at RUNTIME for the misspelled value", async () => {
+    // Boot-time loudness must not come at the cost of runtime safety. If an
+    // instance somehow starts with a bad value, it still cannot send.
+    process.env.JOBPILOT_ENV = "prod";
+    const { platformForcesDryRun, environment } = await import("@/lib/outreach/send-policy");
+    expect(environment()).toBe("local");
+    expect(platformForcesDryRun()).toBe(true);
+  });
+});

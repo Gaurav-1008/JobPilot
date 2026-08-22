@@ -44,11 +44,56 @@ export type Environment = "local" | "staging" | "production";
  */
 const PRODUCTION = "production";
 
+const KNOWN: readonly string[] = [PRODUCTION, "staging", "local"];
+
+/**
+ * The resolved environment. NEVER throws.
+ *
+ * An unrecognised value resolves to `local`, which forces dry-run. That is the
+ * right RUNTIME behaviour and it must stay that way: this function is called
+ * from inside the interlock chain, where the fail-closed guarantee (EC-P5-56)
+ * outranks everything, and a throw there would be an exception on the delivery
+ * path rather than a block.
+ *
+ * Catching the typo is a separate job, done at boot — see
+ * `unrecognisedEnvironment()` below.
+ */
 export function environment(): Environment {
   const raw = process.env.JOBPILOT_ENV?.trim();
   if (raw === PRODUCTION) return "production";
   if (raw === "staging") return "staging";
   return "local";
+}
+
+/**
+ * The typo, if there is one: a value that is set, non-empty, and not one of the
+ * three we know.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * WHY THIS EXISTS SEPARATELY FROM `environment()`.
+ *
+ * Resolving an unknown value to `local` is safe — nothing sends — but it is
+ * SILENT, and silence is the problem. Deploy with `JOBPILOT_ENV=prod` and
+ * every safety property still holds while the product quietly does not do the
+ * thing it was deployed to do. Nobody notices until someone asks why no email
+ * ever arrived.
+ *
+ * "Unset" and "misspelled" are different intents and get different treatment:
+ *
+ *   unset          → local. A developer running `npm run dev` meant this.
+ *   "prod"         → a deploy that intended production and missed. Refuse to
+ *                    boot (P7.4.4), because config errors are fully knowable
+ *                    at startup and this one costs a silent outage otherwise.
+ *
+ * The runtime fallback stays regardless, so an instance that somehow starts
+ * anyway still cannot send. Boot-time loudness and runtime safety are not in
+ * tension here; this gets both.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+export function unrecognisedEnvironment(): string | null {
+  const raw = process.env.JOBPILOT_ENV?.trim();
+  if (raw === undefined || raw === "") return null;   // unset is legitimate
+  return KNOWN.includes(raw) ? null : raw;
 }
 
 /**

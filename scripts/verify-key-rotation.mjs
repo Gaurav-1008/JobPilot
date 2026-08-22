@@ -49,6 +49,37 @@ function keyFor(version, currentVersion) {
 }
 
 const currentVersion = Number(process.env.ENCRYPTION_KEY_VERSION ?? 1);
+
+/**
+ * THE CHECK THAT WOULD HAVE PREVENTED A REAL DATA LOSS.
+ *
+ * A rotation is only an overlap if the two keys DIFFER. Set ENCRYPTION_KEY_V1
+ * to the same value as ENCRYPTION_KEY and you have performed an in-place swap
+ * while every variable looks correctly configured: three env vars set, version
+ * bumped, V1 present. Nothing about the shape of it is wrong.
+ *
+ * This happened. A script meant to preserve the outgoing key wrote the incoming
+ * one into both slots, and the first symptom was every stored credential
+ * failing to authenticate — by which point the old key existed nowhere.
+ *
+ * Checked BEFORE any row is read, because the entire point is to fail while
+ * the old key is still recoverable from wherever it currently lives.
+ */
+for (const [name, value] of Object.entries(process.env)) {
+  if (!/^ENCRYPTION_KEY_V\d+$/.test(name)) continue;
+  if (value?.trim() && value.trim() === process.env.ENCRYPTION_KEY?.trim()) {
+    console.error(
+      `\nREFUSING TO CONTINUE: ${name} is identical to ENCRYPTION_KEY.\n\n` +
+      "  That is an in-place swap wearing an overlap's clothes. The outgoing key\n" +
+      "  is not saved anywhere, and every row written under it becomes\n" +
+      "  permanently unreadable the moment it leaves your shell history.\n\n" +
+      `  Recover the previous key and set ${name} to it — NOT to the new one.\n` +
+      "  docs/runbooks/encryption-key-rotation.md\n",
+    );
+    process.exit(2);
+  }
+}
+
 const prisma = new PrismaClient();
 
 const rows = await prisma.senderCredential.findMany({

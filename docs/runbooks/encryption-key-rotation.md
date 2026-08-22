@@ -114,6 +114,29 @@ its connection check"*, or `openSecret()` throws.
 | Old key not published | Is `ENCRYPTION_KEY_V1` set? | Set it and redeploy. Rows are intact and still readable. |
 | Version not bumped | `ENCRYPTION_KEY_VERSION` still `1` while `ENCRYPTION_KEY` holds the new key | This is the in-place swap. Restore the old key to `ENCRYPTION_KEY` immediately; nothing is lost, because the rows were never rewritten. |
 | Old key discarded | `ENCRYPTION_KEY_V1` unrecoverable, rows still at v1 | Unrecoverable. Clear the affected rows so users re-enter credentials — a visible, actionable failure beats a permanent silent block. |
+| **`V1` set to the NEW key** | `ENCRYPTION_KEY_V1` == `ENCRYPTION_KEY` | An in-place swap wearing an overlap's clothes. Both `npm run verify:key-rotation` and service startup now REFUSE on this — but only the old key can undo it. See below. |
+
+### The failure this runbook did not previously describe
+
+It is possible to perform every step correctly and still destroy the old key,
+by writing the **new** key into `ENCRYPTION_KEY_V1` instead of the outgoing one.
+Nothing looks wrong: three variables set, version bumped, `V1` present. The
+first symptom is `Unsupported state or unable to authenticate data` on every
+credential — at which point the old key exists nowhere.
+
+This happened once, during Phase 7, to exactly one stored credential. It was
+caused by automating step 2 with a script that read `ENCRYPTION_KEY` after
+overwriting it rather than before.
+
+Two guards now exist, and both fail while the old key may still be recoverable:
+
+- `npm run verify:key-rotation` exits non-zero **before reading any row**
+- ① and ③ refuse to boot (`lib/config/require-env.ts`)
+
+**Do step 2 by hand.** It is three variables. The minute saved by scripting it
+is not worth the failure mode, and the guards above only catch the case where
+the two values are identical — not the case where `V1` is set to some third,
+wrong value.
 
 **Never** delete `sender_credentials` rows to "fix" a decryption error before
 confirming which of these applies. A key that is merely unpublished is a config
