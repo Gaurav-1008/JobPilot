@@ -36,6 +36,44 @@ function stripFences(raw: string): string {
 const MAX_BACKOFF_ATTEMPTS = 3;
 
 /**
+ * The longest we will sit inside one request waiting for a rate limit to clear.
+ *
+ * A token-per-minute bucket refills within a minute, so ~15s covers the common
+ * case. Beyond it the honest move is to fail with a typed error rather than
+ * hold an HTTP connection open on a hope.
+ */
+const MAX_RETRY_WAIT_MS = 15_000;
+
+/**
+ * How long the provider asked us to wait, in ms, or null if it did not say.
+ *
+ * Checks the `retry-after` header first (seconds, per RFC 9110), then falls
+ * back to the sentence Groq puts in the body — "Please try again in 7.7775s" —
+ * because the header is absent on some error shapes and the prose is not.
+ *
+ * The SDK exposes headers as either a `Headers` instance or a plain object
+ * depending on how the error was constructed, so both are handled.
+ */
+function retryAfterMs(err: unknown): number | null {
+  if (!err || typeof err !== "object") return null;
+
+  const headers = (err as { headers?: unknown }).headers;
+  const raw =
+    headers instanceof Headers
+      ? headers.get("retry-after")
+      : (headers as Record<string, string> | undefined)?.["retry-after"];
+
+  if (raw) {
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000);
+  }
+
+  const message = extractProviderMessage(err);
+  const stated = /try again in ([\d.]+)s/i.exec(message);
+  return stated ? Math.ceil(Number(stated[1]) * 1000) : null;
+}
+
+/**
  * The provider's own error sentence, if there is one.
  *
  * The OpenAI SDK puts the parsed body on `.error` and the raw text on
@@ -68,9 +106,52 @@ async function createWithBackoff(
           cause: err,
         });
       }
+      /**
+       * 413 — the request alone exceeds the per-minute token budget.
+       *
+       * Retrying cannot fix this. The budget refills, but the request is still
+       * bigger than the whole minute's allowance, so a retry loop burns the
+       * user's time to arrive at the same refusal. It is a sizing problem:
+       * a smaller batch, a shorter prompt, or a higher tier.
+       */
+      if (status === 413) {
+        throw new LlmError(
+          "LLM_CONFIG_ERROR",
+          `This request is larger than the per-minute token budget allows: ${extractProviderMessage(err)}`,
+          { stage, cause: err },
+        );
+      }
+
       if (status === 429) {
-        // exponential backoff: 0.5s, 1s, 2s
-        await sleep(500 * 2 ** attempt);
+        /**
+         * HONOUR THE PROVIDER'S OWN retry-after.
+         *
+         * The backoff here was 0.5s, 1s, 2s — about 3.5s of total patience.
+         * Groq answers a token-per-minute 429 with `retry-after: 9`, and says
+         * the same thing in prose in the body. So all three retries fired while
+         * the bucket was still empty, and the chain reported LLM_RATE_LIMIT
+         * having waited a quarter of the time it was explicitly told to wait.
+         *
+         * Observed on the tailoring chain: resume-parser succeeded at 1,937
+         * tokens, jd-extraction hit the 8,000 TPM ceiling, and the whole run
+         * failed with 6 seconds of "application-code" — a run that would have
+         * completed by waiting.
+         *
+         * Capped, because a provider is allowed to say "wait 10 minutes" and a
+         * request handler is not allowed to honour that: past the cap this
+         * becomes a clean typed error the UI can retry deliberately.
+         */
+        const advised = retryAfterMs(err);
+        const wait = advised ?? 500 * 2 ** attempt;
+
+        if (wait > MAX_RETRY_WAIT_MS) {
+          throw new LlmError(
+            "LLM_RATE_LIMIT",
+            `The model is rate limited for another ${Math.ceil(wait / 1000)}s. Nothing was lost — try again shortly.`,
+            { stage, cause: err },
+          );
+        }
+        await sleep(wait);
         continue;
       }
       const isTimeout =

@@ -1513,6 +1513,14 @@ The retry path handles this correctly rather than losing work: `run-prompt.ts` b
 
 **That prediction is now wrong, and this is the correction:** the first ceiling is the LLM provider's TPM, not the job boards. Raising it is a billing change, not an engineering one.
 
+**Tailoring does not fit inside one minute's budget.** Measured on a real run: `analyze()` issues four calls (two `Promise.all` pairs) and `tailor()` two more, at roughly 1,900 tokens each on `openai/gpt-oss-120b` — about **11,400 tokens for one tailoring run against an 8,000-token minute**. The parallel pairs make it worse rather than better: they fire together, so they collide with the ceiling instead of pacing under it.
+
+The chain now waits out a 429 rather than failing it (`run-prompt.ts` honours `retry-after`), so a run completes — it just spans more than a minute. Three ways out, in ascending order of effort:
+
+1. **Raise the tier.** The only option that makes tailoring feel instant.
+2. **Point `TAILORING_MODEL` at `openai/gpt-oss-20b`.** Fewer reasoning tokens per call, at some quality cost on bullet rewriting — the one stage where quality is the product.
+3. **Serialize the `Promise.all` pairs.** Same total tokens, spread across the window instead of spiking into it. Cheapest change, and it makes the run slower in the good case to make it survivable in the bad one.
+
 ### 22.3 Opened by Phase 7
 
 Two questions the hardening work created rather than answered. Both are honest gaps, not oversights.
