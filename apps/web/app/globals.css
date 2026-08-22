@@ -2,7 +2,13 @@
 
 /*
  * ════════════════════════════════════════════════════════════════════════════
- * JobPilot design tokens.
+ * JobPilot design tokens — "Elegant Luxury".
+ *
+ * Palette adopted from the shadcn theme of the same name
+ * (https://21st.dev/@serafimcloud/themes/elegant-luxury): warm parchment
+ * surfaces, deep crimson brand, gold accents, Poppins / Libre Baskerville /
+ * IBM Plex Mono. Values below are the theme's own oklch numbers unless a
+ * comment says otherwise, and every deviation says why.
  *
  * ONE RULE: components never write a raw colour. Every surface, border, and
  * piece of text resolves through a token below, so a component written once is
@@ -24,25 +30,45 @@
 
 :root {
   /* ── Surfaces ─────────────────────────────────────────────────────────── */
-  --background: #f6f7fb;
-  --foreground: #0b1220;
+  /*
+   * THE PAGE IS DARKER THAN THE THEME SHIPS IT, ON PURPOSE.
+   *
+   * Elegant Luxury sets `background` and `card` to the same parchment
+   * (oklch 0.9779). That works for a demo page of loose shadcn cards leaning on
+   * a shadow, and it does not work here: this app separates a card from the
+   * page with `bg-card` twenty-nine times and with `border-border` thirty-four
+   * times. At identical values the fill does nothing, and the theme's border is
+   * 1.13:1 against it — so a jobs row, a score panel, and the page they sit on
+   * would all be the same sheet of paper.
+   *
+   * `--card` keeps the theme's exact parchment. The PAGE steps down instead
+   * (1.08:1 under the card), which reads as the card being lit rather than the
+   * page being grey, and leaves the theme's own surface untouched where the
+   * content actually is.
+   */
+  --background: oklch(0.9520 0.0085 61.0000);
+  --foreground: oklch(0.2178 0 0);
 
-  --card: #ffffff;
-  --card-foreground: #0b1220;
+  --card: oklch(0.9779 0.0042 56.3756);
+  --card-foreground: oklch(0.2178 0 0);
 
   /* One step above card, for nested panels that need to separate without
      adding a second border (data tables, evidence panels, sub-cards). */
-  --elevated: #fbfcfe;
+  --elevated: oklch(0.9930 0.0030 56.3756);
 
-  --muted: #eef1f6;
-  --muted-foreground: #56607a;
+  /* Also deepened a shade from the theme's 0.9431: with the page now sitting
+     at 0.9520, the shipped value landed *above* the background and a muted
+     chip on a page — the skeleton, the empty-state disc — read as a lighter
+     patch than the thing it was supposed to recede into. */
+  --muted: oklch(0.9340 0.0090 60.0000);
+  --muted-foreground: oklch(0.4444 0.0096 73.6390);
 
   /* ── Brand ────────────────────────────────────────────────────────────── */
-  /* indigo-600. White on this is 6.3:1 — the reason it is not indigo-500,
-     which lands at 4.47:1 and fails AA for the button labels sitting on it. */
-  --primary: #4f46e5;
-  --primary-foreground: #ffffff;
-  --primary-hover: #4338ca;
+  /* The theme's crimson. White on it is 7.53:1, so button labels clear AA with
+     room, and it is dark enough to double as text (7.06:1 on --card). */
+  --primary: oklch(0.4650 0.1470 24.9381);
+  --primary-foreground: oklch(1.0000 0 0);
+  --primary-hover: oklch(0.4050 0.1350 24.9381);
   --primary-soft: color-mix(in srgb, var(--primary) 10%, var(--card));
 
   /*
@@ -52,11 +78,11 @@
    * button labels clear 4.5:1 on top of it. A link is the inverse problem —
    * coloured text sitting ON the page background — and the two requirements
    * pull in opposite directions. Using one value for both is fine in light
-   * mode by luck, and fails in dark mode by arithmetic: indigo dark enough to
-   * carry white text measures 3.68:1 against a near-black page, so every
-   * inline link in the app sat below AA while the buttons passed.
+   * mode by luck, and fails in dark mode by arithmetic: this theme's dark
+   * crimson measures 2.70:1 against its own dark page, so every inline link in
+   * the app would sit below AA while the buttons passed.
    *
-   * Light mode happens to be able to share the value (5.87:1 on --background),
+   * Light mode happens to be able to share the value (6.59:1 on --background),
    * and it is still written out separately so the dark override has something
    * to override and the roles stay distinguishable.
    *
@@ -64,92 +90,136 @@
    * the active step in the tailoring stepper uses it too, for the same reason a
    * link does: it is the brand hue sitting on the page rather than under it.
    */
-  --link: #4f46e5;
+  --link: oklch(0.4650 0.1470 24.9381);
 
-  --accent: #eef2ff;
-  --accent-foreground: #3730a3;
+  --accent: oklch(0.9619 0.0580 95.6174);
+  --accent-foreground: oklch(0.3958 0.1331 25.7230);
+
+  /* Part of the theme's contract and exposed for it, though no component
+     reaches for them yet — the `secondary` Button and Badge variants stay on
+     --muted, because a neutral chip that turns gold stops being neutral. */
+  --secondary: oklch(0.9625 0.0385 89.0943);
+  --secondary-foreground: oklch(0.4847 0.1022 75.1153);
 
   /* ── Lines ────────────────────────────────────────────────────────────── */
-  --border: #e2e6ee;
+  /* The theme's gold hairline, darkened from 0.9355 to 0.9080. At the shipped
+     value a card outline is 1.13:1 against its own fill — below the point a
+     hairline is visible at all on a non-retina display, which matters here
+     because the border IS the card edge on every list row. */
+  --border: oklch(0.9080 0.0320 81.0000);
   /* For controls the user is meant to aim at — inputs, selects, checkboxes.
      A form field bounded by the same hairline as a card reads as decoration
      rather than as something you can type into. */
-  --border-strong: #cbd2e0;
-  --input: #cbd2e0;
-  --ring: #4f46e5;
+  --border-strong: oklch(0.8250 0.0400 78.0000);
+  --input: oklch(0.8250 0.0400 78.0000);
+  --ring: oklch(0.4650 0.1470 24.9381);
 
   /* ── Status ───────────────────────────────────────────────────────────── */
-  --success: #15803d;
-  --warning: #b45309;
-  --danger: #b91c1c;
-  --info: #0369a1;
+  /*
+   * DANGER IS NOT THE BRAND RED, IN A THEME WHOSE BRAND IS RED.
+   *
+   * Elegant Luxury's `destructive` (oklch 0.4437 0.1613 26.9) sits a hair from
+   * its `primary` (0.4650 0.1470 24.9) — side by side they are the same
+   * burgundy, so "Delete application" would have looked exactly like "Save".
+   * Danger is pushed lighter and considerably more saturated: still red, but
+   * vivid against the brand's muted burgundy rather than a shade of it. The
+   * alert components carry a soft fill and a border as well, so the state never
+   * rests on hue alone.
+   *
+   * Warning takes the theme's own gold (its `secondary-foreground`), which is
+   * the palette's native amber rather than a bolted-on one. Success and info
+   * have no counterpart in a red-and-gold palette; both are held at the same
+   * chroma weight as the rest so they read as members of it, not imports.
+   */
+  --success: oklch(0.4700 0.1150 152.0000);
+  --warning: oklch(0.4847 0.1022 75.1153);
+  --danger: oklch(0.5150 0.1950 28.5000);
+  --info: oklch(0.4800 0.0900 235.0000);
 
   /* ── Score bands (0–100 match scores) ─────────────────────────────────── */
-  --score-strong: #15803d;
-  --score-fair: #b45309;
-  --score-weak: #64748b;
+  --score-strong: oklch(0.4700 0.1150 152.0000);
+  --score-fair: oklch(0.4847 0.1022 75.1153);
+  /* Warm stone rather than blue-grey: a cool neutral is the one thing that
+     looks wrong on parchment. Held at 0.52 so the weak band is still 4.5:1 on
+     the PAGE, not only on a card. */
+  --score-weak: oklch(0.5200 0.0180 70.0000);
 
   /* ── Shape ────────────────────────────────────────────────────────────── */
-  --radius: 0.625rem;
+  /* The theme's radius. Tighter than the 0.625rem this app used, which is the
+     point — square-ish corners are most of what separates this style from a
+     generic rounded dashboard. */
+  --radius: 0.375rem;
 
   /* ── Elevation ────────────────────────────────────────────────────────── */
-  /* Light mode lifts with soft shadow; dark mode cannot (see below). */
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
-  --shadow-md: 0 1px 3px 0 rgb(15 23 42 / 0.07), 0 1px 2px -1px rgb(15 23 42 / 0.05);
-  --shadow-lg: 0 10px 24px -6px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+  /*
+   * The theme's shadow scale, which is not a neutral drop shadow: it is a wide
+   * 16px bloom tinted with the brand red (hsl(0 63% 18%)) and offset 1px right
+   * and down. On parchment that reads as warm depth; a grey shadow on the same
+   * surface reads as dirt. Light mode lifts with it; dark mode cannot (below).
+   */
+  --shadow-sm: 1px 1px 16px -2px hsl(0 63% 18% / 0.12), 1px 1px 2px -3px hsl(0 63% 18% / 0.12);
+  --shadow-md: 1px 1px 16px -2px hsl(0 63% 18% / 0.12), 1px 2px 4px -3px hsl(0 63% 18% / 0.12);
+  --shadow-lg: 1px 1px 16px -2px hsl(0 63% 18% / 0.12), 1px 4px 6px -3px hsl(0 63% 18% / 0.12);
 }
 
 /*
  * Dark theme.
  *
- * Not the light palette inverted. Two things change in kind rather than in
+ * Not the light palette inverted. Three things change in kind rather than in
  * degree:
  *
- *   1. STATUS FOREGROUNDS GET LIGHTER, NOT DARKER. `#b91c1c` on a dark card is
- *      3:1 and unreadable at 13px; the 400-weight equivalents are the ones that
- *      carry.
- *   2. SHADOWS STOP WORKING. A drop shadow on a dark surface is invisible, so
- *      elevation is carried by `--elevated` and `--border` instead, and the
- *      shadow variables are dialled back to near-nothing rather than left to
- *      render as grey mud.
+ *   1. STATUS FOREGROUNDS GET LIGHTER, NOT DARKER. The light crimson is 2.3:1
+ *      on a dark card and unreadable at 13px; the light-red and amber
+ *      equivalents — the theme's own chart colours, which is where it keeps
+ *      its bright end — are the ones that carry.
+ *   2. THE BRAND STOPS BEING TEXT. `--primary` stays a fill only; `--link` and
+ *      `--ring` move to a rose light enough to read (6.30:1 on --card) and to
+ *      be seen as a focus outline (7.26:1 on --background).
+ *   3. SHADOWS STOP WORKING. The theme ships the same red-tinted 12% shadow for
+ *      dark that it does for light, which on a near-black surface is nothing at
+ *      all. Elevation is carried by `--elevated` and `--border` instead, and
+ *      the shadows go to plain black at an opacity that actually registers.
  */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #090c14;
-    --foreground: #e7ecf5;
+    --background: oklch(0.2161 0.0061 56.0434);
+    --foreground: oklch(0.9699 0.0013 106.4238);
 
-    --card: #11151f;
-    --card-foreground: #e7ecf5;
-    --elevated: #171c28;
+    --card: oklch(0.2685 0.0063 34.2976);
+    --card-foreground: oklch(0.9699 0.0013 106.4238);
+    --elevated: oklch(0.3180 0.0070 34.2976);
 
-    --muted: #1b212e;
-    --muted-foreground: #98a3ba;
+    --muted: oklch(0.2291 0.0060 56.0708);
+    --muted-foreground: oklch(0.8687 0.0043 56.3660);
 
-    --primary: #5d55ea;
-    --primary-foreground: #ffffff;
-    --primary-hover: #6f68ee;
+    --primary: oklch(0.5054 0.1905 27.5181);
+    --primary-foreground: oklch(0.9779 0.0042 56.3756);
+    --primary-hover: oklch(0.5700 0.1905 27.5181);
     --primary-soft: color-mix(in srgb, var(--primary) 18%, var(--card));
 
-    /* indigo-400. 6.55:1 on --background, 6.12:1 on --card — the same hue
-       family as --primary, two steps lighter so it reads as text. */
-    --link: #818cf8;
+    /* Same hue family as --primary, lifted until it reads as text: 6.30:1 on
+       --card, 7.26:1 on --background. */
+    --link: oklch(0.7450 0.1450 25.0000);
 
-    --accent: #1e1b4b;
-    --accent-foreground: #c7d2fe;
+    --accent: oklch(0.5553 0.1455 48.9975);
+    --accent-foreground: oklch(0.9619 0.0580 95.6174);
 
-    --border: #222939;
-    --border-strong: #333c50;
-    --input: #333c50;
-    --ring: #7c76f0;
+    --secondary: oklch(0.4732 0.1247 46.2007);
+    --secondary-foreground: oklch(0.9619 0.0580 95.6174);
 
-    --success: #4ade80;
-    --warning: #fbbf24;
-    --danger: #f87171;
-    --info: #60a5fa;
+    --border: oklch(0.3741 0.0087 67.5582);
+    --border-strong: oklch(0.4600 0.0110 67.5582);
+    --input: oklch(0.4600 0.0110 67.5582);
+    --ring: oklch(0.7450 0.1450 25.0000);
 
-    --score-strong: #4ade80;
-    --score-fair: #fbbf24;
-    --score-weak: #7c8699;
+    --success: oklch(0.7900 0.1400 152.0000);
+    --warning: oklch(0.8369 0.1644 84.4286);
+    --danger: oklch(0.7106 0.1661 22.2162);
+    --info: oklch(0.7700 0.0900 235.0000);
+
+    --score-strong: oklch(0.7900 0.1400 152.0000);
+    --score-fair: oklch(0.8369 0.1644 84.4286);
+    --score-weak: oklch(0.6950 0.0130 60.0000);
 
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
     --shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.4);
@@ -163,9 +233,9 @@
  * These sit outside the theme blocks on purpose. A custom property is
  * substituted at computed-value time on the element that uses it, so a
  * `color-mix()` written once against `var(--danger)` and `var(--card)`
- * re-resolves per theme automatically. Declaring eight more hex values in the
- * dark block would work exactly once and then rot the first time a status
- * colour is adjusted in only one of the two places.
+ * re-resolves per theme automatically. Declaring eight more values in the dark
+ * block would work exactly once and then rot the first time a status colour is
+ * adjusted in only one of the two places.
  */
 :root {
   --success-soft: color-mix(in srgb, var(--success) 12%, var(--card));
@@ -194,6 +264,8 @@
   --color-link: var(--link);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
 
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
@@ -225,8 +297,30 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /*
+   * Poppins / Libre Baskerville / IBM Plex Mono, the theme's pairing, loaded in
+   * layout.tsx. The serif is display-only — it is here so a heading can reach
+   * for `font-serif`, not so body copy can.
+   */
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-baskerville), ui-serif, Georgia, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
+
+}
+
+/*
+ * Tracking, as a scale derived from one base rather than six independent
+ * numbers — the theme's arrangement, and the reason it is a plain `@theme`
+ * block: these need to exist as real custom properties for the `calc()` chain
+ * and the `body` rule below to resolve against.
+ */
+@theme {
+  --tracking-normal: 0em;
+  --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
+  --tracking-tight: calc(var(--tracking-normal) - 0.025em);
+  --tracking-wide: calc(var(--tracking-normal) + 0.025em);
+  --tracking-wider: calc(var(--tracking-normal) + 0.05em);
+  --tracking-widest: calc(var(--tracking-normal) + 0.1em);
 }
 
 * {
@@ -236,6 +330,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
+  letter-spacing: var(--tracking-normal);
   /* Dashboard screens stack numbers in columns; proportional digits make a
      score of 100 wider than 88 and the column stops lining up. */
   font-variant-numeric: tabular-nums;

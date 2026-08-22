@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Poppins, IBM_Plex_Mono, Libre_Baskerville } from "next/font/google";
 import "./globals.css";
 
 import { Providers } from "@/components/providers";
@@ -7,21 +7,41 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { AppFooter } from "@/components/layout/AppFooter";
 
 /*
- * Geist stays, over the Fira Sans / Fira Code pairing the dashboard style
- * usually calls for. Geist Sans is the same category of face — a neo-grotesque
- * with a tall x-height and unambiguous 1/l/I — and Geist Mono covers the
- * monospaced slots (email bodies, provider ids, pasted JDs). Swapping would add
- * a second font-family download to every page load in exchange for a
- * difference nobody would name.
+ * The Elegant Luxury pairing: Poppins for interface text, Libre Baskerville for
+ * display, IBM Plex Mono for the monospaced slots (email bodies, provider ids,
+ * pasted JDs).
+ *
+ * This replaces Geist, which was chosen here for costing two variable files and
+ * being unobjectionable. Poppins is neither — it is a geometric sans with
+ * near-circular bowls and a wide set, which is most of why the theme reads as
+ * warm rather than as a dashboard, and it ships as static instances.
+ *
+ * WEIGHTS ARE ENUMERATED, NOT ASSUMED. next/font fetches one file per weight
+ * declared and synthesises anything missing, and synthesised bold on a
+ * geometric face smears the counters. The app uses exactly four: 400 default,
+ * 500 for labels (55 call sites), 600 for headings (24), 700 once. The serif
+ * loads regular alone — it is used at display sizes where Baskerville's own
+ * contrast is the weight, and a second file would buy one heading nothing.
  */
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const baskerville = Libre_Baskerville({
+  variable: "--font-baskerville",
   subsets: ["latin"],
+  weight: ["400"],
+  display: "swap",
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -38,7 +58,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${poppins.variable} ${baskerville.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Providers>

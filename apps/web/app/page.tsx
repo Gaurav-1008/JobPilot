@@ -75,7 +75,13 @@ export default function Home() {
           Truthfulness enforced server-side
         </span>
 
-        <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+        {/* The one place the theme's serif appears. Libre Baskerville is a
+            display face here and nowhere else: it is loaded at regular weight
+            only, so `font-normal` is deliberate — asking for semibold would
+            have the browser synthesise it and smear the stroke contrast that is
+            the entire reason to set a headline in Baskerville. Interface text
+            stays in Poppins, where an x-height built for 13px belongs. */}
+        <h1 className="mx-auto mt-6 max-w-3xl font-serif text-4xl font-normal tracking-tight text-balance sm:text-5xl lg:text-6xl">
           Your whole job search, in one pipeline.
         </h1>
 
